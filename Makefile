@@ -1,4 +1,4 @@
-.PHONY: help install-deps init-infrastructure bootstrap bootstrap-with-crd-fix deploy-infra deploy-k8s deploy-all clean status check-argocd test-pulumi validate validate-terraform validate-python
+.PHONY: help install-deps init-infrastructure bootstrap bootstrap-with-crd-fix fix-pulumi-crds deploy-infra deploy-k8s deploy-all clean status check-argocd test-pulumi validate validate-terraform validate-python
 
 # Default target
 help:
@@ -11,6 +11,7 @@ help:
 	@echo "  init-infrastructure - Initialize Pulumi stack"
 	@echo "  bootstrap          - Install ArgoCD v3.0.12 and Pulumi Operator (Complete)"
 	@echo "  bootstrap-with-crd-fix - Alternative bootstrap that handles CRD annotation issues"
+	@echo "  fix-pulumi-crds    - Standalone fix for Pulumi CRD annotation issues"
 	@echo "  deploy-infra       - Deploy infrastructure with Pulumi Operator"
 	@echo "  deploy-k8s         - Deploy Kubernetes resources with ArgoCD"
 	@echo "  deploy-all         - Bootstrap and deploy everything"
@@ -50,96 +51,6 @@ init-infrastructure:
 
 # Bootstrap ArgoCD v3.0.12 and Pulumi Operator (Complete Installation)
 bootstrap:
-	@echo "🚀 Starting Complete ArgoCD v3.0.12 Bootstrap Process..."
-	@echo ""
-	
-	@echo "=== Pre-flight Checks ==="
-	@echo "Checking kubectl connectivity..."
-	@kubectl version --client
-	@kubectl cluster-info --request-timeout=10s > /dev/null || (echo "❌ Cannot connect to Kubernetes cluster" && exit 1)
-	@echo "✅ Kubernetes cluster connectivity verified"
-	
-	@echo "Checking required tools..."
-	@command -v kustomize >/dev/null 2>&1 || (echo "❌ kustomize not found. Install from https://kustomize.io/" && exit 1)
-	@echo "✅ kustomize found: $(kustomize version --short)"
-	@echo ""
-	
-	@echo "=== Step 1: Installing ArgoCD v3.0.12 (Complete) ==="
-	@echo "Creating argocd namespace..."
-	@kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
-	
-	@echo "Installing ArgoCD CRDs first..."
-	@kubectl apply -f https://raw.githubusercontent.com/argoproj/argo-cd/v3.0.12/manifests/crds/application-crd.yaml
-	@kubectl apply -f https://raw.githubusercontent.com/argoproj/argo-cd/v3.0.12/manifests/crds/appproject-crd.yaml
-	@kubectl apply -f https://raw.githubusercontent.com/argoproj/argo-cd/v3.0.12/manifests/crds/applicationset-crd.yaml
-	@echo "✅ ArgoCD CRDs installed"
-	
-	@echo "Installing complete ArgoCD v3.0.12 with custom configuration..."
-	@kubectl apply -k argocd-install/
-	@echo "✅ ArgoCD v3.0.12 manifests applied"
-	
-	@echo "Waiting for ArgoCD components to be ready (up to 5 minutes)..."
-	@echo "  - Checking argocd-server..."
-	@kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=argocd-server -n argocd --timeout=300s
-	@echo "  - Checking argocd-application-controller..."
-	@kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=argocd-application-controller -n argocd --timeout=300s
-	@echo "  - Checking argocd-repo-server..."
-	@kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=argocd-repo-server -n argocd --timeout=300s
-	@echo "  - Checking redis..."
-	@kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=argocd-redis -n argocd --timeout=300s
-	@echo "✅ All ArgoCD components are ready!"
-	
-	@echo ""
-	@echo "=== Step 2: Installing Pulumi Operator v2.0 ==="
-	@echo "Applying Pulumi Operator configuration with server-side apply..."
-	@echo "(This avoids CRD annotation size issues)"
-	@kubectl apply --server-side -k pulumi-operator/
-	@echo "Waiting for Pulumi Operator to be ready..."
-	@kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=pulumi-operator -n pulumi-kubernetes-operator --timeout=300s || echo "⚠️  Pulumi Operator may still be starting"
-	@echo "✅ Pulumi Operator v2.0 installation complete"
-	
-	@echo ""
-	@echo "=== Step 3: Setting up Bootstrap Applications ==="
-	@echo "Applying bootstrap application configurations..."
-	@kubectl apply -f bootstrap/bootstrap-apps.yaml -n argocd 2>/dev/null || echo "ℹ️  Bootstrap apps may not exist yet - skipping"
-	@echo "Waiting for bootstrap applications to sync..."
-	@sleep 30
-	@kubectl wait --for=condition=Synced app/argocd-installation -n argocd --timeout=300s 2>/dev/null || echo "ℹ️  Bootstrap app sync pending"
-	@kubectl wait --for=condition=Synced app/pulumi-operator -n argocd --timeout=300s 2>/dev/null || echo "ℹ️  Pulumi operator app sync pending"
-	
-	@echo ""
-	@echo "=== Step 4: Verification and Status ==="
-	@echo "Verifying ArgoCD installation..."
-	@kubectl get pods -n argocd -l app.kubernetes.io/part-of=argocd
-	@echo ""
-	@echo "Checking ArgoCD service status..."
-	@kubectl get svc argocd-server -n argocd
-	@echo ""
-	@echo "Verifying CRDs are available..."
-	@kubectl get crd applications.argoproj.io appprojects.argoproj.io applicationsets.argoproj.io
-	
-	@echo ""
-	@echo "🎉 === Bootstrap Complete! ===="
-	@echo "📋 ArgoCD v3.0.12 Installation Summary:"
-	@echo "   ✅ All CRDs installed (Application, AppProject, ApplicationSet)"
-	@echo "   ✅ All core components running (server, controller, repo-server, redis)"
-	@echo "   ✅ Custom configuration applied (Pulumi Stack support, RBAC)"
-	@echo "   ✅ Service exposure configured (LoadBalancer + Ingress)"
-	@echo "   ✅ Pulumi Operator v2.0 GA ready for infrastructure deployment"
-	@echo ""
-	@echo "🔑 Next Steps:"
-	@echo "   1. Get ArgoCD access details: make check-argocd"
-	@echo "   2. Deploy infrastructure: make deploy-infra"
-	@echo "   3. Deploy applications: make deploy-k8s"
-	@echo "   4. Check overall status: make status"
-	@echo ""
-	@echo "🌐 ArgoCD UI will be available via:"
-	@echo "   - LoadBalancer: kubectl get svc argocd-server -n argocd"
-	@echo "   - Port Forward: kubectl port-forward svc/argocd-server -n argocd 8080:443"
-	@echo "   - Ingress: kubectl get ingress argocd-server-ingress -n argocd"
-
-# Alternative bootstrap for environments with CRD annotation issues
-bootstrap-with-crd-fix:
 	@echo "🚀 Starting ArgoCD v3.0.12 Bootstrap with CRD Fix..."
 	@echo "🔧 This target uses kubectl create for CRDs to avoid annotation size issues"
 	@echo ""
@@ -185,9 +96,12 @@ bootstrap-with-crd-fix:
 	@echo "Building Pulumi Operator manifests..."
 	@kustomize build pulumi-operator/ > /tmp/pulumi-operator-manifests.yaml
 	@echo "Extracting and creating CRDs separately to avoid annotation issues..."
-	@grep -A 10000 "kind: CustomResourceDefinition" /tmp/pulumi-operator-manifests.yaml > /tmp/pulumi-crds.yaml || true
+	@echo "Using awk to extract complete CRD documents..."
+	@awk '/^---$/{doc=""} {doc=doc"\n"$0} /kind: CustomResourceDefinition/{crd=1} /^---$/ && crd{print doc; crd=0}' /tmp/pulumi-operator-manifests.yaml > /tmp/pulumi-crds.yaml || true
 	@if [ -s /tmp/pulumi-crds.yaml ]; then \
 		echo "Installing Pulumi CRDs with kubectl create..."; \
+		echo "CRD content preview:"; \
+		head -20 /tmp/pulumi-crds.yaml; \
 		kubectl create -f /tmp/pulumi-crds.yaml --dry-run=client || kubectl replace -f /tmp/pulumi-crds.yaml; \
 	else \
 		echo "No CRDs found, proceeding with normal apply"; \
@@ -195,7 +109,7 @@ bootstrap-with-crd-fix:
 	@echo "Installing remaining Pulumi Operator components..."
 	@grep -v "kind: CustomResourceDefinition" /tmp/pulumi-operator-manifests.yaml | kubectl apply -f - || kubectl apply --server-side -k pulumi-operator/
 	@echo "Waiting for Pulumi Operator to be ready..."
-	@kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=pulumi-operator -n pulumi-kubernetes-operator --timeout=300s || echo "⚠️  Pulumi Operator may still be starting"
+	@kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=pulumi-operator -n pulumi-system --timeout=300s || echo "⚠️  Pulumi Operator may still be starting"
 	@echo "✅ Pulumi Operator v2.0 installation complete with CRD fix"
 	@rm -f /tmp/pulumi-operator-manifests.yaml /tmp/pulumi-crds.yaml
 	
@@ -239,6 +153,15 @@ bootstrap-with-crd-fix:
 	@echo "   - LoadBalancer: kubectl get svc argocd-server -n argocd"
 	@echo "   - Port Forward: kubectl port-forward svc/argocd-server -n argocd 8080:443"
 	@echo "   - Ingress: kubectl get ingress argocd-server-ingress -n argocd"
+
+# Standalone Pulumi CRD fix (use when bootstrap fails with annotation errors)
+fix-pulumi-crds:
+	@echo "🔧 Standalone Pulumi CRD Fix"
+	@echo "============================"
+	@echo "Running Pulumi CRD fix script..."
+	@chmod +x ./fix-pulumi-crds.sh
+	@./fix-pulumi-crds.sh
+
 deploy-infra:
 	@echo "Deploying infrastructure with Pulumi Operator..."
 	kubectl apply -f argocd/infrastructure-app.yaml -n argocd
