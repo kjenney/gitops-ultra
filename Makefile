@@ -10,7 +10,6 @@ help:
 	@echo "  validate-terraform  - Validate Terraform modules (legacy, optional)"
 	@echo "  init-infrastructure - Initialize Pulumi stack"
 	@echo "  bootstrap          - Install ArgoCD v3.0.12 and Pulumi Operator (Complete)"
-	@echo "  bootstrap-with-crd-fix - Alternative bootstrap that handles CRD annotation issues"
 	@echo "  fix-pulumi-crds    - Standalone fix for Pulumi CRD annotation issues"
 	@echo "  deploy-infra       - Deploy infrastructure with Pulumi Operator"
 	@echo "  deploy-k8s         - Deploy Kubernetes resources with ArgoCD"
