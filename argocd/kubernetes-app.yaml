@@ -14,7 +14,7 @@ spec:
   project: default
   
   source:
-    repoURL: https://github.com/your-org/your-repo.git  # Replace with your Git repo
+    repoURL: https://github.com/kjenney/gitops-ultra  # Replace with your Git repo
     targetRevision: HEAD
     path: kubernetes
     

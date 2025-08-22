@@ -12,7 +12,7 @@ metadata:
 spec:
   # Stack configuration
   stack: dev
-  projectRepo: https://github.com/your-org/your-repo.git  # Replace with your repo
+  projectRepo: https://github.com/kjenney/gitops-ultra # Replace with your repo
   repoDir: infrastructure/pulumi
   branch: refs/heads/main
   

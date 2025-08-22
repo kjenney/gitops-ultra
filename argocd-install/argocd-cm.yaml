@@ -13,7 +13,7 @@ data:
   # Configure repositories (can be overridden via UI)
   repositories: |
     - type: git
-      url: https://github.com/your-org/your-repo.git
+      url: https://github.com/kjenney/gitops-ultra
       
   # Configure resource customizations for Pulumi Stack CRDs
   resource.customizations.health.pulumi.com_Stack: |
