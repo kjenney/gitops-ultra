@@ -170,9 +170,9 @@ bootstrap:
 	
 	@echo ""
 	@echo "=== Step 2: Deploying Pulumi Operator via Helm Chart ==="
-	kubectl apply -f argocd/argoocisecret.yaml -n argocd
+	@kubectl apply -f argocd/argoocisecret.yaml -n argocd
 	@echo "Installing Pulumi Operator using ArgoCD and OCI Helm chart..."
-	kubectl apply -f bootstrap/pulumi-kubernetes-operator-app.yaml -n argocd
+	@kubectl apply -f bootstrap/pulumi-kubernetes-operator-app.yaml -n argocd
 	@echo "✅ Pulumi Operator ArgoCD application deployed"
 	
 	@echo "Waiting for Pulumi Operator to sync and be ready..."
@@ -182,7 +182,7 @@ bootstrap:
 	@echo "✅ Pulumi Operator installation complete via Helm"
 
 	@echo "=== Deploying ArgoCD Installation ==="
-	kubectl apply -f bootstrap/argocd-installation-app.yaml -n argocd
+	@kubectl apply -f bootstrap/argocd-installation-app.yaml -n argocd
 	@echo "Waiting for ArgoCD Installation to sync and be ready..."
 	@kubectl wait --for=condition=Synced app/argocd-installation -n argocd --timeout=300s 2>/dev/null || echo "ℹ️  Bootstrap app sync pending"
 	
