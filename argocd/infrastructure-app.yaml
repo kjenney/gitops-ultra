@@ -1,4 +1,4 @@
-apiVersion: argoproj.io/v1alpha1
+apiVersion: argoproj.io/v1
 kind: Application
 metadata:
   name: myapp-infrastructure
@@ -14,9 +14,36 @@ spec:
   project: default
   
   source:
-    repoURL: https://github.com/kjenney/gitops-ultra
-    targetRevision: HEAD
-    path: pulumi-operator
+    repoURL: oci://ghcr.io/pulumi/helm-charts
+    targetRevision: 2.2.0
+    chart: pulumi-kubernetes-operator
+    helm:
+      oci: true
+      releaseName: pulumi-kubernetes-operator
+      values: |
+        operator:
+          args:
+            - --zap-log-level=info
+          resources:
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+            requests:
+              cpu: 500m
+              memory: 512Mi
+        # Enable metrics
+        metrics:
+          enabled: true
+          serviceMonitor:
+            enabled: false
+        # Configure RBAC
+        rbac:
+          create: true
+        # Service account configuration
+        serviceAccount:
+          create: true
+          annotations: {}
+          name: ""
     
   destination:
     server: https://kubernetes.default.svc

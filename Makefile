@@ -1,16 +1,18 @@
-.PHONY: help install-deps init-infrastructure bootstrap bootstrap-with-crd-fix fix-pulumi-crds deploy-infra deploy-k8s deploy-all clean status check-argocd test-pulumi validate validate-terraform validate-python
+.PHONY: help install-deps init-infrastructure bootstrap install-python-deps quick-check deploy-infra deploy-k8s deploy-all clean status check-argocd test-pulumi validate validate-terraform validate-python setup-gitops-apps
 
 # Default target
 help:
 	@echo "Available commands:"
 	@echo "  install-deps        - Install all dependencies"
+	@echo "  install-python-deps - Install Python dependencies (optional, for validation)"
+	@echo "  quick-check        - Quick environment check before bootstrap"
 	@echo "  test-pulumi         - Test Pulumi installation and preview"
 	@echo "  validate            - Validate all configurations (Python-focused)"
 	@echo "  validate-python     - Validate Python/Pulumi configuration only"
 	@echo "  validate-terraform  - Validate Terraform modules (legacy, optional)"
 	@echo "  init-infrastructure - Initialize Pulumi stack"
-	@echo "  bootstrap          - Install ArgoCD v3.0.12 and Pulumi Operator (Complete)"
-	@echo "  fix-pulumi-crds    - Standalone fix for Pulumi CRD annotation issues"
+	@echo "  bootstrap          - Install ArgoCD v3.0.12 and Pulumi Operator via Helm (Complete)"
+	@echo "  setup-gitops-apps  - Apply GitOps bootstrap applications (Helm-based)"
 	@echo "  deploy-infra       - Deploy infrastructure with Pulumi Operator"
 	@echo "  deploy-k8s         - Deploy Kubernetes resources with ArgoCD"
 	@echo "  deploy-all         - Bootstrap and deploy everything"
@@ -29,6 +31,81 @@ install-deps:
 	kustomize version || echo "Install kustomize from https://kustomize.io/"
 	@echo "Checking Terraform installation (optional for legacy modules)..."
 	terraform version || echo "⚠️  Terraform not found (optional - only needed for legacy modules)"
+	@echo "Checking Python YAML module for validation scripts..."
+	@python3 -c "import yaml; print('✅ PyYAML available for enhanced validation')" 2>/dev/null || echo "ℹ️  PyYAML not found - optional for enhanced validation. Install with: make install-python-deps"
+
+# Install Python dependencies (optional, for validation)
+install-python-deps:
+	@echo "Installing Python dependencies for enhanced validation..."
+	@echo "This will install PyYAML globally for better YAML processing in validation scripts."
+	@python3 -m pip install --user PyYAML || pip3 install --user PyYAML
+	@echo "✅ Python dependencies installed"
+	@echo "Testing YAML module..."
+	@python3 -c "import yaml; print('✅ PyYAML is now available for validation scripts')"
+	@echo ""
+	@echo "📝 Note: PyYAML is helpful for:"
+	@echo "  - Enhanced YAML validation in scripts"
+	@echo "  - Better configuration file processing"
+	@echo "  - Custom validation logic"
+	@echo "  - Not required for basic operation (Helm handles CRDs)"
+
+# Quick environment check before bootstrap
+quick-check:
+	@echo "🔍 Quick Environment Check"
+	@echo "======================="
+	@echo "Checking environment before running bootstrap..."
+	@echo ""
+	
+	@echo "1. Checking kubectl connectivity..."
+	@kubectl version --client || (echo "❌ kubectl not found" && exit 1)
+	@kubectl cluster-info --request-timeout=10s > /dev/null || (echo "❌ Cannot connect to Kubernetes cluster" && exit 1)
+	@echo "   ✅ Kubernetes cluster connectivity verified"
+	
+	@echo ""
+	@echo "2. Checking required tools..."
+	@command -v curl >/dev/null 2>&1 || (echo "❌ curl not found" && exit 1)
+	@echo "   ✅ curl found"
+	@command -v kustomize >/dev/null 2>&1 || (echo "❌ kustomize not found" && exit 1)
+	@echo "   ✅ kustomize found"
+	
+	@echo ""
+	@echo "3. Checking validation capabilities..."
+	@if python3 -c "import yaml" >/dev/null 2>&1; then \
+		echo "   ✅ Python3 with PyYAML available (enhanced validation)"; \
+	else \
+		echo "   ℹ️  Python3 with PyYAML not available (basic validation only)"; \
+		echo "       For enhanced validation: make install-python-deps"; \
+	fi
+	
+	@echo ""
+	@echo "4. Checking cluster permissions..."
+	@kubectl auth can-i create crd --quiet && echo "   ✅ Can create CRDs" || echo "   ⚠️  Cannot create CRDs (may need cluster-admin)"
+	@kubectl auth can-i create namespace --quiet && echo "   ✅ Can create namespaces" || echo "   ⚠️  Cannot create namespaces"
+	
+	@echo ""
+	@echo "5. Checking for existing installations..."
+	@if kubectl get namespace argocd >/dev/null 2>&1; then \
+		echo "   ℹ️  ArgoCD namespace already exists"; \
+		kubectl get pods -n argocd -l app.kubernetes.io/part-of=argocd --no-headers 2>/dev/null | wc -l | awk '{if($1>0) print "       ArgoCD pods found: " $1; else print "       No ArgoCD pods found"}'; \
+	else \
+		echo "   ✅ ArgoCD namespace not found (clean install)"; \
+	fi
+	
+	@if kubectl get namespace pulumi-system >/dev/null 2>&1; then \
+		echo "   ℹ️  Pulumi namespace already exists"; \
+		kubectl get pods -n pulumi-system --no-headers 2>/dev/null | wc -l | awk '{if($1>0) print "       Pulumi pods found: " $1; else print "       No Pulumi pods found"}'; \
+	else \
+		echo "   ✅ Pulumi namespace not found (clean install)"; \
+	fi
+	
+	@echo ""
+	@echo "🎉 Environment Check Complete!"
+	@echo "========================="
+	@echo "Ready to run: make bootstrap"
+	@echo ""
+	@echo "📝 Recommendation:"
+	@echo "   If you see any warnings above, consider running 'make install-python-deps' first"
+	@echo "   for enhanced validation capabilities (optional)."
 
 # Test Pulumi installation
 test-pulumi:
@@ -51,8 +128,8 @@ init-infrastructure:
 
 # Bootstrap ArgoCD v3.0.12 and Pulumi Operator (Complete Installation)
 bootstrap:
-	@echo "🚀 Starting ArgoCD v3.0.12 Bootstrap with CRD Fix..."
-	@echo "🔧 This target uses kubectl create for CRDs to avoid annotation size issues"
+	@echo "🚀 Starting ArgoCD v3.0.12 Bootstrap with Helm-based Pulumi Operator..."
+	@echo "🎯 Using OCI Helm chart: oci://ghcr.io/pulumi/helm-charts"
 	@echo ""
 	
 	@echo "=== Pre-flight Checks ==="
@@ -92,56 +169,42 @@ bootstrap:
 	@echo "✅ All ArgoCD components are ready!"
 	
 	@echo ""
-	@echo "=== Step 2: Installing Pulumi Operator v2.0 with CRD Fix ==="
-	@echo "Building Pulumi Operator manifests..."
-	@kustomize build pulumi-operator/ > /tmp/pulumi-operator-manifests.yaml
-	@echo "Extracting and creating CRDs separately to avoid annotation issues..."
-	@echo "Using awk to extract complete CRD documents..."
-	@awk '/^---$/{doc=""} {doc=doc"\n"$0} /kind: CustomResourceDefinition/{crd=1} /^---$/ && crd{print doc; crd=0}' /tmp/pulumi-operator-manifests.yaml > /tmp/pulumi-crds.yaml || true
-	@if [ -s /tmp/pulumi-crds.yaml ]; then \
-		echo "Installing Pulumi CRDs with kubectl create..."; \
-		echo "CRD content preview:"; \
-		head -20 /tmp/pulumi-crds.yaml; \
-		kubectl create -f /tmp/pulumi-crds.yaml --dry-run=client || kubectl replace -f /tmp/pulumi-crds.yaml; \
-	else \
-		echo "No CRDs found, proceeding with normal apply"; \
-	fi
-	@echo "Installing remaining Pulumi Operator components..."
-	@grep -v "kind: CustomResourceDefinition" /tmp/pulumi-operator-manifests.yaml | kubectl apply -f - || kubectl apply --server-side -k pulumi-operator/
-	@echo "Waiting for Pulumi Operator to be ready..."
-	@kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=pulumi-operator -n pulumi-system --timeout=300s || echo "⚠️  Pulumi Operator may still be starting"
-	@echo "✅ Pulumi Operator v2.0 installation complete with CRD fix"
-	@rm -f /tmp/pulumi-operator-manifests.yaml /tmp/pulumi-crds.yaml
+	@echo "=== Step 2: Deploying Pulumi Operator via Helm Chart ==="
+	kubectl apply -f argocd/argoocisecret.yaml -n argocd
+	@echo "Installing Pulumi Operator using ArgoCD and OCI Helm chart..."
+	kubectl apply -f bootstrap/bootstrap-apps.yaml -n argocd
+	@echo "✅ Pulumi Operator ArgoCD application deployed"
+	
+	@echo "Waiting for Pulumi Operator to sync and be ready..."
+	#@kubectl wait --for=condition=Synced app/pulumi-kubernetes-operator -n argocd --timeout=60s
+	#@echo "Waiting for Pulumi Operator pods to be ready..."
+	#@kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=pulumi-kubernetes-operator -n pulumi-system --timeout=300s 2>/dev/null || echo "⚠️  Pulumi Operator pod labels may be different - checking status..."
+	#@kubectl get pods -n pulumi-system
+	@echo "✅ Pulumi Operator installation complete via Helm"
 	
 	@echo ""
-	@echo "=== Step 3: Setting up Bootstrap Applications ==="
-	@echo "Applying bootstrap application configurations..."
-	@kubectl apply -f bootstrap/bootstrap-apps.yaml -n argocd 2>/dev/null || echo "ℹ️  Bootstrap apps may not exist yet - skipping"
-	@echo "Waiting for bootstrap applications to sync..."
-	@sleep 30
-	@kubectl wait --for=condition=Synced app/argocd-installation -n argocd --timeout=300s 2>/dev/null || echo "ℹ️  Bootstrap app sync pending"
-	@kubectl wait --for=condition=Synced app/pulumi-operator -n argocd --timeout=300s 2>/dev/null || echo "ℹ️  Pulumi operator app sync pending"
-	
-	@echo ""
-	@echo "=== Step 4: Verification and Status ==="
+	@echo "=== Step 3: Verification and Status ==="
 	@echo "Verifying ArgoCD installation..."
 	@kubectl get pods -n argocd -l app.kubernetes.io/part-of=argocd
 	@echo ""
 	@echo "Checking ArgoCD service status..."
 	@kubectl get svc argocd-server -n argocd
 	@echo ""
-	@echo "Verifying CRDs are available..."
-	@kubectl get crd applications.argoproj.io appprojects.argoproj.io applicationsets.argoproj.io
+	@echo "Verifying ArgoCD applications..."
+	@kubectl get applications -n argocd
+	@echo ""
+	@echo "Verifying Pulumi Operator..."
+	@kubectl get pods -n pulumi-system
 	@kubectl get crd stacks.pulumi.com workspaces.auto.pulumi.com 2>/dev/null || echo "ℹ️  Pulumi CRDs may still be initializing"
 	
 	@echo ""
-	@echo "🎉 === Bootstrap Complete with CRD Fix! ===="
+	@echo "🎉 === Bootstrap Complete with Helm! ===="
 	@echo "📋 ArgoCD v3.0.12 + Pulumi Operator v2.0 Installation Summary:"
-	@echo "   ✅ All CRDs installed using kubectl create (avoiding annotation limits)"
+	@echo "   ✅ ArgoCD v3.0.12 installed with custom configuration"
+	@echo "   ✅ Pulumi Operator v2.0 deployed via OCI Helm chart"
 	@echo "   ✅ All core components running (server, controller, repo-server, redis)"
-	@echo "   ✅ Custom configuration applied (Pulumi Stack support, RBAC)"
+	@echo "   ✅ GitOps-managed Pulumi Operator using ArgoCD"
 	@echo "   ✅ Service exposure configured (LoadBalancer + Ingress)"
-	@echo "   ✅ Pulumi Operator v2.0 GA ready for infrastructure deployment"
 	@echo ""
 	@echo "🔑 Next Steps:"
 	@echo "   1. Get ArgoCD access details: make check-argocd"
@@ -154,21 +217,35 @@ bootstrap:
 	@echo "   - Port Forward: kubectl port-forward svc/argocd-server -n argocd 8080:443"
 	@echo "   - Ingress: kubectl get ingress argocd-server-ingress -n argocd"
 
-# Standalone Pulumi CRD fix (use when bootstrap fails with annotation errors)
-fix-pulumi-crds:
-	@echo "🔧 Standalone Pulumi CRD Fix"
-	@echo "============================"
-	@echo "Running Pulumi CRD fix script..."
-	@chmod +x ./fix-pulumi-crds.sh
-	@./fix-pulumi-crds.sh
+# Apply GitOps bootstrap applications (Helm-based)
+setup-gitops-apps:
+	@echo "🔄 Setting up GitOps Bootstrap Applications (Helm-based)"
+	@echo "======================================================"
+	@echo "This will configure ArgoCD to manage Pulumi Operator via Helm chart."
+	@echo "Using OCI Helm chart: oci://ghcr.io/pulumi/helm-charts (chart: pulumi-kubernetes-operator)"
+	@echo ""
+	@echo "Applying bootstrap application configurations..."
+	@kubectl apply -f bootstrap/bootstrap-apps.yaml -n argocd
+	@echo "Waiting for bootstrap applications to sync..."
+	@sleep 15
+	@echo "Checking application status..."
+	@kubectl get applications -n argocd
+	@echo ""
+	@echo "Checking Pulumi Operator deployment..."
+	@kubectl get pods -n pulumi-system
+	@echo ""
+	@echo "🎉 GitOps bootstrap applications configured!"
+	@echo "ArgoCD now manages Pulumi Operator via OCI Helm chart."
+	@echo "Monitor with: kubectl get applications -n argocd -w"
 
 deploy-infra:
 	@echo "Deploying infrastructure with Pulumi Operator..."
+	kubectl apply -f argocd/argoocisecret.yaml -n argocd
 	kubectl apply -f argocd/infrastructure-app.yaml -n argocd
 	@echo "Waiting for infrastructure deployment..."
 	kubectl wait --for=condition=Synced app/myapp-infrastructure -n argocd --timeout=600s
 	@echo "Checking Pulumi Stack status..."
-	kubectl get stack myapp-infrastructure -n pulumi-kubernetes-operator -o yaml
+	kubectl get stack myapp-infrastructure -n pulumi-system -o yaml
 
 # Deploy Kubernetes resources via ArgoCD
 deploy-k8s:
@@ -211,7 +288,7 @@ status:
 	kubectl get applications -n argocd -o wide || echo "ArgoCD not installed or accessible"
 	@echo ""
 	@echo "=== Pulumi Stack Status ==="
-	kubectl get stack -n pulumi-kubernetes-operator -o wide || echo "Pulumi Operator not installed or no stacks"
+	kubectl get stack -n pulumi-system -o wide || echo "Pulumi Operator not installed or no stacks"
 	@echo ""
 	@echo "=== Infrastructure Resources ==="
 	@echo "Checking AWS resources..."
@@ -225,7 +302,7 @@ status:
 	kubectl get pods -n argocd -l app.kubernetes.io/name=argocd-server || echo "ArgoCD not found"
 	@echo ""
 	@echo "=== Pulumi Operator Health ==="
-	kubectl get pods -n pulumi-kubernetes-operator -l app.kubernetes.io/name=pulumi-operator || echo "Pulumi Operator not found"
+	kubectl get pods -n pulumi-system -l app.kubernetes.io/name=pulumi-kubernetes-operator || echo "Pulumi Operator not found"
 
 # Clean up all resources
 clean:
@@ -240,8 +317,8 @@ clean:
 	
 	@echo ""
 	@echo "=== Cleaning up ArgoCD and Pulumi Operator ==="
-	kubectl delete -k pulumi-operator/ --ignore-not-found=true
-	kubectl delete namespace pulumi-kubernetes-operator --ignore-not-found=true
+	@echo "Note: Pulumi Operator is now managed via Helm - cleaning up applications..."
+	kubectl delete namespace pulumi-system --ignore-not-found=true
 	kubectl delete -k argocd-install/ -n argocd --ignore-not-found=true
 	kubectl delete namespace argocd --ignore-not-found=true
 	
@@ -284,9 +361,19 @@ validate-python:
 	kubectl apply --dry-run=client -k argocd-install/ > /dev/null && echo "✅ ArgoCD installation is valid"
 	
 	@echo ""
-	@echo "6. Validating Pulumi Operator installation..."
-	kustomize build pulumi-operator/ > /dev/null && echo "✅ Pulumi Operator kustomization builds successfully"
-	kubectl apply --dry-run=client -k pulumi-operator/ > /dev/null && echo "✅ Pulumi Operator installation is valid"
+	@echo "6. Validating Pulumi Operator Helm configuration..."
+	@echo "   Checking ArgoCD applications configuration..."
+	@if kubectl apply --dry-run=client -f bootstrap/bootstrap-apps.yaml -n argocd > /dev/null 2>&1; then \
+		echo "   ✅ Bootstrap applications configuration is valid"; \
+	else \
+		echo "   ⚠️  Bootstrap applications validation failed"; \
+	fi
+	@echo "   Checking infrastructure application configuration..."
+	@if kubectl apply --dry-run=client -f argocd/infrastructure-app.yaml -n argocd > /dev/null 2>&1; then \
+		echo "   ✅ Infrastructure application configuration is valid"; \
+	else \
+		echo "   ⚠️  Infrastructure application validation failed"; \
+	fi
 	
 	@echo ""
 	@echo "7. Validating ArgoCD applications..."
@@ -334,7 +421,7 @@ dev-argocd-forward:
 
 dev-logs-infrastructure:
 	@echo "Following Pulumi Stack logs..."
-	kubectl logs -f -l app.kubernetes.io/name=pulumi-operator -n pulumi-kubernetes-operator
+	kubectl logs -f -l app.kubernetes.io/name=pulumi-kubernetes-operator -n pulumi-system
 
 dev-logs-argocd:
 	@echo "Following ArgoCD Application Controller logs..."

@@ -1,76 +1,114 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: argocd-installation
+  name: pulumi-kubernetes-operator
   namespace: argocd
   labels:
-    app.kubernetes.io/name: argocd-installation
-    app.kubernetes.io/part-of: bootstrap
+    app.kubernetes.io/name: pulumi-kubernetes-operator
+    app.kubernetes.io/component: operator
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
-  
   source:
-    repoURL: https://github.com/kjenney/gitops-ultra
-    targetRevision: HEAD
-    path: argocd-install
-    
+    # Using OCI registry for Helm chart (note: no oci:// prefix)
+    chart: pulumi-kubernetes-operator
+    repoURL: ghcr.io/pulumi/helm-charts
+    targetRevision: 2.2.0  # Latest stable version
+    helm:
+      # Helm values to customize the deployment
+      values: |
+        # Operator configuration
+        operator:
+          image:
+            repository: pulumi/pulumi-kubernetes-operator
+            tag: ""  # Uses chart appVersion
+            pullPolicy: IfNotPresent
+          
+          # Resource limits for the operator
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          
+          # Environment variables
+          env:
+            - name: PULUMI_K8S_AWAIT_ALL
+              value: "true"
+        
+        # Service account configuration
+        serviceAccount:
+          create: true
+          name: pulumi-kubernetes-operator
+          annotations: {}
+        
+        # RBAC configuration
+        rbac:
+          create: true
+        
+        # Pod security context
+        podSecurityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          fsGroup: 1000
+        
+        # Security context for containers
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          readOnlyRootFilesystem: true
+        
+        # Node selector, tolerations, and affinity
+        nodeSelector: {}
+        tolerations: []
+        affinity: {}
+        
+        # Metrics configuration
+        metrics:
+          enabled: true
+          serviceMonitor:
+            enabled: false  # Set to true if using Prometheus Operator
+  
   destination:
     server: https://kubernetes.default.svc
-    namespace: argocd
-    
+    namespace: pulumi-kubernetes-operator
+  
   syncPolicy:
+    # Automatic sync configuration
     automated:
       prune: true
       selfHeal: true
       allowEmpty: false
+    
+    # Sync options
     syncOptions:
-    - CreateNamespace=true
-    - PrunePropagationPolicy=foreground
-    - PruneLast=true
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+      - ServerSideApply=true
+      - ApplyOutOfSyncOnly=true
+    
+    # Retry configuration
     retry:
       limit: 5
       backoff:
         duration: 5s
         factor: 2
         maxDuration: 3m
-
----
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: pulumi-operator
-  namespace: argocd
-  labels:
-    app.kubernetes.io/name: pulumi-operator
-    app.kubernetes.io/part-of: bootstrap
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
-spec:
-  project: default
   
-  source:
-    repoURL: https://github.com/kjenney/gitops-ultra
-    targetRevision: HEAD
-    path: pulumi-operator
-    
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: pulumi-system
-    
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-      allowEmpty: false
-    syncOptions:
-    - CreateNamespace=true
-    - PrunePropagationPolicy=foreground
-    - PruneLast=true
-    retry:
-      limit: 5
-      backoff:
-        duration: 5s
-        factor: 2
-        maxDuration: 3m
+  # Health check configuration
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
+  
+  # Application health and status
+  revisionHistoryLimit: 10
