@@ -17,6 +17,7 @@ help:
 	@echo "  deploy-all         - Bootstrap and deploy everything"
 	@echo "  status             - Show deployment status"
 	@echo "  check-argocd       - Check ArgoCD installation and access"
+	@echo "  dev-argocd-forward  - Forward port for ArgoCD access"
 	@echo "  clean              - Clean up all resources"
 
 # Install dependencies
