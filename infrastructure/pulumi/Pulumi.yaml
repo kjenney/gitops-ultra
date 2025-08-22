@@ -1,0 +1,17 @@
+name: pulumi-terraform-infrastructure
+runtime:
+  name: python
+  options:
+    virtualenv: venv
+description: Infrastructure as Code using Pulumi with Terraform modules for AWS S3, SQS, and Kubernetes integration
+template:
+  config:
+    aws:region:
+      description: The AWS region to deploy into
+      default: us-west-2
+    project:prefix:
+      description: Prefix for resource names
+      default: myapp
+    kubernetes:namespace:
+      description: Kubernetes namespace for the application
+      default: default

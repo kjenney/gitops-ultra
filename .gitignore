@@ -1,0 +1,105 @@
+# Pulumi
+infrastructure/pulumi/venv/
+infrastructure/pulumi/.pulumi/
+infrastructure/pulumi/__pycache__/
+infrastructure/pulumi/*.pyc
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Terraform
+infrastructure/terraform-modules/**/.terraform/
+infrastructure/terraform-modules/**/.terraform.lock.hcl
+infrastructure/terraform-modules/**/terraform.tfstate*
+infrastructure/terraform-modules/**/terraform.tfvars
+infrastructure/terraform-modules/**/.terraform.tfstate.lock.info
+
+# IDE and OS
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# AWS credentials (never commit these)
+.aws/
+aws-credentials
+
+# Kubernetes secrets
+kubernetes/secrets/
+**/secret*.yaml
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Build artifacts
+dist/
+build/
+out/
+
+# Coverage reports
+coverage/
+*.lcov
+
+# Scripts output
+scripts/*.log
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ArgoCD local configs
+.argocd/
+
+# Local testing
+test-*.yaml
+local-*.yaml
+
+# Deprecated files (can be removed)
+infrastructure/pulumi/node_modules/
+infrastructure/pulumi/package-lock.json
+infrastructure/pulumi/yarn.lock
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

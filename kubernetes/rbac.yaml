@@ -1,0 +1,39 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: myapp-dev-role
+  namespace: myapp-dev
+  labels:
+    app.kubernetes.io/name: myapp-dev-role
+    app.kubernetes.io/managed-by: ArgoCD
+    app.kubernetes.io/part-of: myapp
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+rules:
+- apiGroups: [""]
+  resources: ["configmaps", "secrets", "pods", "services"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: myapp-dev-role-binding
+  namespace: myapp-dev
+  labels:
+    app.kubernetes.io/name: myapp-dev-role-binding
+    app.kubernetes.io/managed-by: ArgoCD
+    app.kubernetes.io/part-of: myapp
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+subjects:
+- kind: ServiceAccount
+  name: myapp-dev-service-account
+  namespace: myapp-dev
+roleRef:
+  kind: Role
+  name: myapp-dev-role
+  apiGroup: rbac.authorization.k8s.io

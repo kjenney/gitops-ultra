@@ -1,0 +1,76 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argocd-installation
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-installation
+    app.kubernetes.io/part-of: bootstrap
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  
+  source:
+    repoURL: https://github.com/your-org/your-repo.git  # Replace with your Git repo
+    targetRevision: HEAD
+    path: argocd-install
+    
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+    
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+    - CreateNamespace=true
+    - PrunePropagationPolicy=foreground
+    - PruneLast=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: pulumi-operator
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: pulumi-operator
+    app.kubernetes.io/part-of: bootstrap
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  
+  source:
+    repoURL: https://github.com/your-org/your-repo.git  # Replace with your Git repo
+    targetRevision: HEAD
+    path: pulumi-operator
+    
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: pulumi-system
+    
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+    - CreateNamespace=true
+    - PrunePropagationPolicy=foreground
+    - PruneLast=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

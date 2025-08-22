@@ -1,0 +1,108 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: myapp-kubernetes
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: myapp-kubernetes
+    app.kubernetes.io/part-of: myapp
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  project: default
+  
+  source:
+    repoURL: https://github.com/your-org/your-repo.git  # Replace with your Git repo
+    targetRevision: HEAD
+    path: kubernetes
+    
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: myapp-dev
+    
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+    - CreateNamespace=true
+    - PrunePropagationPolicy=foreground
+    - PruneLast=true
+    - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+        
+  # Sync waves for proper resource ordering
+  syncWave: 3
+  
+  # Health checks for custom resources
+  ignoreDifferences:
+  - group: v1
+    kind: ConfigMap
+    name: myapp-dev-aws-resources
+    jsonPointers:
+    - /data/S3_BUCKET_NAME
+    - /data/SQS_QUEUE_URL
+    - /data/SQS_QUEUE_NAME
+
+---
+# AppProject for better organization (optional)
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: myapp-project
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: myapp-project
+    app.kubernetes.io/part-of: myapp
+spec:
+  description: Project for MyApp infrastructure and applications
+  
+  sourceRepos:
+  - 'https://github.com/your-org/your-repo.git'
+  
+  destinations:
+  - namespace: 'myapp-*'
+    server: https://kubernetes.default.svc
+  - namespace: argocd
+    server: https://kubernetes.default.svc
+  - namespace: pulumi-system
+    server: https://kubernetes.default.svc
+    
+  clusterResourceWhitelist:
+  - group: ''
+    kind: Namespace
+  - group: rbac.authorization.k8s.io
+    kind: ClusterRole
+  - group: rbac.authorization.k8s.io
+    kind: ClusterRoleBinding
+  - group: pulumi.com
+    kind: Stack
+    
+  namespaceResourceWhitelist:
+  - group: ''
+    kind: '*'
+  - group: apps
+    kind: '*'
+  - group: networking.k8s.io
+    kind: '*'
+  - group: rbac.authorization.k8s.io
+    kind: '*'
+  - group: pulumi.com
+    kind: '*'
+    
+  roles:
+  - name: admin
+    description: Admin access to myapp project
+    policies:
+    - p, proj:myapp-project:admin, applications, *, myapp-project/*, allow
+    - p, proj:myapp-project:admin, repositories, *, *, allow
+    groups:
+    - myapp-admins

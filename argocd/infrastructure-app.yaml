@@ -1,0 +1,64 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: myapp-infrastructure
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: myapp-infrastructure
+    app.kubernetes.io/part-of: myapp
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: default
+  
+  source:
+    repoURL: https://github.com/your-org/your-repo.git  # Replace with your Git repo
+    targetRevision: HEAD
+    path: pulumi-operator
+    
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: pulumi-system
+    
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+    - CreateNamespace=true
+    - PrunePropagationPolicy=foreground
+    - PruneLast=true
+    - SkipDryRunOnMissingResource=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 5m
+        
+  # Health check for Pulumi Stack CRD
+  ignoreDifferences:
+  - group: pulumi.com
+    kind: Stack
+    name: myapp-infrastructure
+    jsonPointers:
+    - /status
+    - /spec/refresh
+
+---
+# Secret for Pulumi configuration (create manually or via external-secrets)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pulumi-config
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: pulumi-config
+    app.kubernetes.io/part-of: myapp
+type: Opaque
+data:
+  # Base64 encoded passphrase for Pulumi state encryption
+  passphrase: bXlzdXBlcnNlY3JldHBhc3NwaHJhc2U=  # Replace with actual base64 encoded passphrase

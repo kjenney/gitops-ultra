@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: myapp-dev
+  labels:
+    name: myapp-dev
+    app.kubernetes.io/managed-by: ArgoCD
+    app.kubernetes.io/part-of: myapp
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"

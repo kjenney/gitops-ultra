@@ -1,0 +1,33 @@
+config:
+  aws:region: us-east-1
+  project:prefix: myapp-prod
+  kubernetes:namespace: myapp-production
+  
+# Production-specific settings
+production:
+  replicas: 5
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "500m"
+    limits:
+      memory: "512Mi"
+      cpu: "1000m"
+  
+# High availability settings
+high_availability:
+  enabled: true
+  zones: 3
+  backup_retention: 90
+  
+# Security settings
+security:
+  encryption_at_rest: true
+  backup_encryption: true
+  access_logging: true
+  
+# Monitoring settings
+monitoring:
+  enabled: true
+  retention_days: 90
+  alerting: true

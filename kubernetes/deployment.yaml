@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myapp-dev-deployment
+  namespace: myapp-dev
+  labels:
+    app.kubernetes.io/name: myapp-dev
+    app.kubernetes.io/managed-by: ArgoCD
+    app.kubernetes.io/part-of: myapp
+    app.kubernetes.io/component: application
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: myapp-dev
+      app.kubernetes.io/component: application
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: myapp-dev
+        app.kubernetes.io/component: application
+    spec:
+      serviceAccountName: myapp-dev-service-account
+      containers:
+      - name: app
+        image: nginx:1.21-alpine  # Replace with your application image
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: PORT
+          value: "8080"
+        envFrom:
+        - configMapRef:
+            name: myapp-dev-aws-resources
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "250m"
+          limits:
+            memory: "128Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        # Example of using AWS credentials through IRSA
+        volumeMounts:
+        - name: aws-token
+          mountPath: /var/run/secrets/eks.amazonaws.com/serviceaccount
+          readOnly: true
+      volumes:
+      - name: aws-token
+        projected:
+          sources:
+          - serviceAccountToken:
+              path: token
+              expirationSeconds: 86400
+              audience: sts.amazonaws.com

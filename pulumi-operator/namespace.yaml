@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pulumi-system
+  labels:
+    name: pulumi-system
+    app.kubernetes.io/name: pulumi-operator
+    app.kubernetes.io/part-of: pulumi-operator
