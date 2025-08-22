@@ -1,9 +1,10 @@
-.PHONY: help install-deps init-infrastructure bootstrap deploy-infra deploy-k8s deploy-all clean status check-argocd
+.PHONY: help install-deps init-infrastructure bootstrap deploy-infra deploy-k8s deploy-all clean status check-argocd test-pulumi
 
 # Default target
 help:
 	@echo "Available commands:"
 	@echo "  install-deps        - Install all dependencies"
+	@echo "  test-pulumi         - Test Pulumi installation and preview"
 	@echo "  init-infrastructure - Initialize Pulumi stack"
 	@echo "  bootstrap          - Install ArgoCD and Pulumi Operator"
 	@echo "  deploy-infra       - Deploy infrastructure with Pulumi Operator"
@@ -23,6 +24,15 @@ install-deps:
 	kubectl version --client
 	@echo "Checking Kustomize installation..."
 	kustomize version || echo "Install kustomize from https://kustomize.io/"
+
+# Test Pulumi installation
+test-pulumi:
+	@echo "Testing Pulumi installation..."
+	cd infrastructure/pulumi && source venv/bin/activate && python3 -c "import pulumi; import pulumi_aws; import pulumi_kubernetes; print('✅ All Pulumi packages imported successfully')"
+	@echo "Testing Pulumi program syntax..."
+	cd infrastructure/pulumi && source venv/bin/activate && python3 -m py_compile __main__.py && echo "✅ Python syntax is valid"
+	@echo "Checking Pulumi configuration..."
+	cd infrastructure/pulumi && source venv/bin/activate && pulumi config && echo "✅ Pulumi configuration loaded successfully" || echo "ℹ️  No Pulumi stack configured yet (run 'make init-infrastructure' to create one)"
 
 # Initialize Pulumi stack (for local development/testing)
 init-infrastructure:
