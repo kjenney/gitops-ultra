@@ -172,15 +172,19 @@ bootstrap:
 	@echo "=== Step 2: Deploying Pulumi Operator via Helm Chart ==="
 	kubectl apply -f argocd/argoocisecret.yaml -n argocd
 	@echo "Installing Pulumi Operator using ArgoCD and OCI Helm chart..."
-	kubectl apply -f bootstrap/bootstrap-apps.yaml -n argocd
+	kubectl apply -f bootstrap/pulumi-kubernetes-operator-app.yaml -n argocd
 	@echo "✅ Pulumi Operator ArgoCD application deployed"
 	
 	@echo "Waiting for Pulumi Operator to sync and be ready..."
 	#@kubectl wait --for=condition=Synced app/pulumi-kubernetes-operator -n argocd --timeout=60s
-	#@echo "Waiting for Pulumi Operator pods to be ready..."
-	#@kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=pulumi-kubernetes-operator -n pulumi-system --timeout=300s 2>/dev/null || echo "⚠️  Pulumi Operator pod labels may be different - checking status..."
-	#@kubectl get pods -n pulumi-system
+	@echo "Waiting for Pulumi Operator pods to be ready..."
+	@kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=pulumi-kubernetes-operator -n pulumi-kubernetes-operator --timeout=300s 2>/dev/null || echo "⚠️  Pulumi Operator pod labels may be different - checking status..."
 	@echo "✅ Pulumi Operator installation complete via Helm"
+
+	@echo "=== Deploying ArgoCD Installation ==="
+	kubectl apply -f bootstrap/argocd-installation-app.yaml -n argocd
+	@echo "Waiting for ArgoCD Installation to sync and be ready..."
+	@kubectl wait --for=condition=Synced app/argocd-installation -n argocd --timeout=300s 2>/dev/null || echo "ℹ️  Bootstrap app sync pending"
 	
 	@echo ""
 	@echo "=== Step 3: Verification and Status ==="
