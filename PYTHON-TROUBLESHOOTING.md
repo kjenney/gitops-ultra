@@ -28,6 +28,31 @@ python3 --version  # Should be 3.7+
 # If not, install a newer Python version
 ```
 
+### ❌ **Validation Errors**
+
+#### Problem: `make validate` fails with Terraform errors
+```bash
+Error: Missing required provider registry.terraform.io/hashicorp/aws
+```
+
+**✅ Solution**: Use the new Python-focused validation:
+```bash
+# Use the updated validation (recommended)
+make validate
+
+# Or validate Python specifically
+make validate-python
+
+# Legacy Terraform validation (optional)
+make validate-terraform
+```
+
+#### Problem: Terraform modules not initialized
+**✅ Solution**: The Terraform modules are now legacy/optional:
+- The project uses **pure Python Pulumi** 
+- Terraform modules are kept for reference only
+- Use `make validate-python` for the active implementation
+
 ### ❌ **Virtual Environment Issues**
 
 #### Problem: Virtual environment not activated
@@ -127,6 +152,9 @@ make install-deps
 # Test Pulumi specifically  
 make test-pulumi
 
+# Validate everything (Python-focused)
+make validate
+
 # Test with preview (doesn't deploy anything)
 make dev-pulumi-preview
 ```
@@ -139,6 +167,19 @@ Testing Pulumi installation...
 ✅ Pulumi configuration loaded successfully
 ```
 
+### Expected Output for `make validate`
+```
+🐍 Validating Python/Pulumi configuration...
+✅ Python environment active
+✅ All Pulumi packages available
+✅ Python syntax is valid
+✅ Kubernetes manifests are valid
+✅ ArgoCD installation is valid
+✅ Pulumi Operator installation is valid
+✅ ArgoCD applications are valid
+✅ Python/Pulumi validation complete!
+```
+
 ## 🔧 **Development Workflow**
 
 ### Recommended Development Process
@@ -149,13 +190,16 @@ make install-deps
 # 2. Test installation
 make test-pulumi
 
-# 3. Initialize stack (if needed)
+# 3. Validate everything
+make validate
+
+# 4. Initialize stack (if needed)
 make init-infrastructure
 
-# 4. Preview changes locally
+# 5. Preview changes locally
 make dev-pulumi-preview
 
-# 5. Deploy via GitOps
+# 6. Deploy via GitOps
 make deploy-all
 ```
 
@@ -171,6 +215,23 @@ pulumi preview
 pulumi up
 pulumi stack output
 ```
+
+## 🏗️ **Architecture Changes**
+
+### **What Changed**
+- ❌ **Before**: TypeScript + Terraform modules via `pulumi-terraform`
+- ✅ **After**: Pure Python Pulumi with native AWS resources
+
+### **Validation Changes**
+- ❌ **Old**: `make validate` required Terraform initialization
+- ✅ **New**: `make validate` focuses on Python/Pulumi (much faster)
+- 🔧 **Legacy**: `make validate-terraform` for old modules (optional)
+
+### **Benefits**
+- ✅ Faster validation (no Terraform init required)
+- ✅ Better error messages and debugging
+- ✅ Simpler dependency management
+- ✅ Full Python type safety and IDE support
 
 ## 🆘 **Getting Help**
 
@@ -188,6 +249,17 @@ pip list | grep pulumi
 # Check Pulumi installation
 pulumi version
 pulumi whoami
+```
+
+### Architecture Status
+```bash
+# Check what's active
+make validate          # Python implementation (active)
+make validate-terraform # Terraform modules (legacy)
+
+# See the difference
+ls infrastructure/pulumi/        # Active Python code
+ls infrastructure/terraform-modules/  # Legacy modules
 ```
 
 ### Log Files and Diagnostics
@@ -216,6 +288,7 @@ cd ../..
 make install-deps
 make init-infrastructure
 make test-pulumi
+make validate
 ```
 
 ## 📚 **Additional Resources**
@@ -229,6 +302,19 @@ make test-pulumi
 
 You know everything is working when:
 - `make test-pulumi` passes all checks
+- `make validate` completes successfully (Python-focused)
 - `make dev-pulumi-preview` shows your infrastructure plan
 - No import errors when running Python commands
 - Virtual environment contains all required packages
+
+## 🎯 **Quick Fix Checklist**
+
+If you're having issues, try these in order:
+
+1. **Install dependencies**: `make install-deps`
+2. **Test Pulumi**: `make test-pulumi`
+3. **Validate configuration**: `make validate`
+4. **Initialize stack**: `make init-infrastructure`
+5. **Preview locally**: `make dev-pulumi-preview`
+
+If any step fails, check the specific error message and refer to the relevant section above.

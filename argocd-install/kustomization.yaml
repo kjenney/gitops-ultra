@@ -4,19 +4,33 @@ kind: Kustomization
 namespace: argocd
 
 resources:
-# ArgoCD official installation
-- https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
-
-patchesStrategicMerge:
-- argocd-server-service.yaml
-- argocd-cm.yaml
+# ArgoCD official installation - v3.0.12 (latest stable)
+- https://raw.githubusercontent.com/argoproj/argo-cd/v3.0.12/manifests/install.yaml
+# Namespace
+- namespace.yaml
+# ArgoCD Ingress (additional resource, not a patch)
+- argocd-ingress.yaml
 
 patches:
-# Enable insecure mode for easier local development (disable in production)
+# Patch service to use LoadBalancer type
 - patch: |-
-    - op: add
-      path: /spec/template/spec/containers/0/command/-
-      value: --insecure
+    - op: replace
+      path: /spec/type
+      value: LoadBalancer
   target:
-    kind: Deployment
+    kind: Service
     name: argocd-server
+    namespace: argocd
+# Apply ConfigMap customizations (Pulumi Stack support, RBAC, etc.)
+- path: argocd-cm-patch.yaml
+  target:
+    kind: ConfigMap
+    name: argocd-cm
+    namespace: argocd
+
+images:
+# Use the same version for all ArgoCD components
+- name: quay.io/argoproj/argocd
+  newTag: v3.0.12
+- name: redis
+  newTag: 7.0.15-alpine

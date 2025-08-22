@@ -39,11 +39,12 @@ graph TB
 ├── pulumi-operator/             # Pulumi Kubernetes Operator
 ├── bootstrap/                   # Bootstrap ArgoCD applications
 ├── infrastructure/              # Infrastructure as Code
-│   └── pulumi/                  # Pure Python Pulumi program
-│       ├── __main__.py         # Main infrastructure program (Python)
-│       ├── requirements.txt    # Python dependencies
-│       ├── Pulumi.yaml         # Project configuration
-│       └── venv/               # Python virtual environment
+│   ├── pulumi/                  # Pure Python Pulumi program
+│   │   ├── __main__.py         # Main infrastructure program (Python)
+│   │   ├── requirements.txt    # Python dependencies
+│   │   ├── Pulumi.yaml         # Project configuration
+│   │   └── venv/               # Python virtual environment
+│   └── terraform-modules/      # Legacy Terraform modules (optional)
 ├── kubernetes/                  # Kubernetes application manifests
 ├── argocd/                     # ArgoCD application definitions
 ├── scripts/                    # Automation scripts
@@ -72,17 +73,24 @@ make install-deps
 make test-pulumi
 ```
 
-### 2️⃣ Bootstrap Everything
+### 2️⃣ Validate Configuration
 
 ```bash
-# Validate configuration
+# Validate everything (Python-focused, fast)
 make validate
 
+# Test locally (optional)
+make dev-pulumi-preview
+```
+
+### 3️⃣ Bootstrap Everything
+
+```bash
 # Bootstrap ArgoCD and Pulumi Operator
 make bootstrap
 ```
 
-### 3️⃣ Deploy Infrastructure and Applications
+### 4️⃣ Deploy Infrastructure and Applications
 
 ```bash
 # Deploy everything
@@ -93,7 +101,7 @@ make deploy-infra    # Infrastructure via Pulumi Operator
 make deploy-k8s      # Applications via ArgoCD
 ```
 
-### 4️⃣ Access ArgoCD UI
+### 5️⃣ Access ArgoCD UI
 
 ```bash
 # Get ArgoCD access details
@@ -109,16 +117,18 @@ make dev-argocd-forward
 ### Infrastructure Changes
 1. **Modify Python code** in `infrastructure/pulumi/__main__.py`
 2. **Test locally** with `make dev-pulumi-preview`
-3. **Commit and push** to Git repository
-4. **ArgoCD detects changes** and updates Pulumi Stack CRD
-5. **Pulumi Operator executes** Python infrastructure code
-6. **AWS resources** are created/updated automatically
+3. **Validate** with `make validate`
+4. **Commit and push** to Git repository
+5. **ArgoCD detects changes** and updates Pulumi Stack CRD
+6. **Pulumi Operator executes** Python infrastructure code
+7. **AWS resources** are created/updated automatically
 
 ### Application Changes
 1. **Modify Kubernetes manifests** in `kubernetes/`
-2. **Commit and push** to Git repository
-3. **ArgoCD syncs changes** automatically
-4. **Applications** are updated with zero downtime
+2. **Validate** with `make validate`
+3. **Commit and push** to Git repository
+4. **ArgoCD syncs changes** automatically
+5. **Applications** are updated with zero downtime
 
 ## 🛠️ Pure Python Infrastructure
 
@@ -188,9 +198,41 @@ make dev-pulumi-up
 make dev-pulumi-destroy
 ```
 
+## 🧪 **Validation & Testing**
+
+### **New Python-Focused Validation**
+```bash
+# Primary validation (fast, Python-focused)
+make validate
+
+# Test Pulumi installation
+make test-pulumi
+
+# Validate only Python/Pulumi
+make validate-python
+
+# Legacy Terraform validation (optional)
+make validate-terraform
+```
+
+### **What's Validated**
+- ✅ Python environment and dependencies
+- ✅ Pulumi program syntax and imports
+- ✅ Kubernetes manifest syntax
+- ✅ ArgoCD configuration
+- ✅ Pulumi Operator setup
+- 🔧 Terraform modules (legacy, optional)
+
 ## 🚨 Troubleshooting
 
 ### Quick Fixes for Common Issues
+
+**Validation Errors**:
+```bash
+# Use the new Python-focused validation
+make validate              # Fast, Python-focused (recommended)
+make validate-terraform    # Legacy Terraform modules (optional)
+```
 
 **Package Installation Error**:
 ```bash
@@ -215,6 +257,7 @@ See **[PYTHON-TROUBLESHOOTING.md](PYTHON-TROUBLESHOOTING.md)** for comprehensive
 - Package installation errors
 - Virtual environment issues
 - Pulumi configuration problems
+- Validation error solutions
 - EKS/IRSA setup issues
 - Development workflow tips
 
@@ -224,11 +267,11 @@ See **[PYTHON-TROUBLESHOOTING.md](PYTHON-TROUBLESHOOTING.md)** for comprehensive
 # Test installation
 make test-pulumi
 
+# Validate configuration
+make validate
+
 # Comprehensive status check
 make status
-
-# Validate all configurations
-make validate
 
 # Component-specific troubleshooting
 ./scripts/troubleshoot.sh python     # Python/Pulumi issues
@@ -296,6 +339,14 @@ make clean
 ./scripts/clean-uninstall.sh
 ```
 
+## 🏗️ **Legacy Terraform Modules**
+
+The `infrastructure/terraform-modules/` directory contains legacy Terraform modules that are **no longer used** in the active deployment. They are kept for reference and can be safely ignored or deleted.
+
+- **Current**: Pure Python Pulumi (`infrastructure/pulumi/__main__.py`)
+- **Legacy**: Terraform modules (`infrastructure/terraform-modules/`)
+- **Validation**: `make validate` focuses on Python, `make validate-terraform` for legacy
+
 ## 🐍 Python Development Best Practices
 
 ### Code Quality
@@ -319,10 +370,13 @@ cd infrastructure/pulumi && source venv/bin/activate
 # 3. Test syntax
 python -m py_compile __main__.py
 
-# 4. Preview changes
+# 4. Validate everything
+make validate
+
+# 5. Preview changes
 pulumi preview
 
-# 5. Commit and let GitOps deploy
+# 6. Commit and let GitOps deploy
 git add . && git commit -m "Update infrastructure"
 ```
 
@@ -331,7 +385,7 @@ git add . && git commit -m "Update infrastructure"
 1. **Fork the repository**
 2. **Create feature branch** (`git checkout -b feature/amazing-feature`)
 3. **Setup Python environment** (`make install-deps`)
-4. **Test changes** (`make test-pulumi && make validate`)
+4. **Test and validate** (`make test-pulumi && make validate`)
 5. **Commit changes** (`git commit -m 'Add amazing feature'`)
 6. **Push to branch** (`git push origin feature/amazing-feature`)
 7. **Open Pull Request**
@@ -350,4 +404,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-**🐍🚀 Ready to deploy Python-powered GitOps infrastructure? Run `make install-deps && make deploy-all`!**
+**🐍🚀 Ready to deploy Python-powered GitOps infrastructure? Run `make install-deps && make validate && make deploy-all`!**

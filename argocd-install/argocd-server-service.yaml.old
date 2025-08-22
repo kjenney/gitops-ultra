@@ -1,0 +1,4 @@
+# This file has been replaced by patches in kustomization.yaml
+# Service modifications are now handled via JSON patches
+# Ingress has been moved to argocd-ingress.yaml
+# This approach avoids conflicts with the base ArgoCD installation

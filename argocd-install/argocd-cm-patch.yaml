@@ -1,0 +1,63 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cm
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-cm
+    app.kubernetes.io/part-of: argocd
+data:
+  # Server configuration
+  server.insecure: "true"  # Set to false in production with proper TLS
+  
+  # Application settings
+  application.instanceLabelKey: argocd.argoproj.io/instance
+  
+  # Configure repositories (can be overridden via UI)
+  repositories: |
+    - type: git
+      url: https://github.com/your-org/your-repo.git
+      
+  # Configure resource customizations for Pulumi Stack CRDs
+  resource.customizations.health.pulumi.com_Stack: |
+    hs = {}
+    if obj.status ~= nil then
+      if obj.status.lastUpdate ~= nil then
+        if obj.status.lastUpdate.state == "succeeded" then
+          hs.status = "Healthy"
+          hs.message = "Stack update succeeded"
+          return hs
+        end
+        if obj.status.lastUpdate.state == "failed" then
+          hs.status = "Degraded"
+          hs.message = "Stack update failed"
+          return hs
+        end
+        if obj.status.lastUpdate.state == "running" then
+          hs.status = "Progressing"
+          hs.message = "Stack update in progress"
+          return hs
+        end
+      end
+    end
+    hs.status = "Unknown"
+    hs.message = "Stack state unknown"
+    return hs
+
+  # Configure sync options for Pulumi stacks
+  resource.customizations.sync.pulumi.com_Stack: |
+    - group: pulumi.com
+      kind: Stack
+      hooks:
+        PreSync: |
+          if obj.metadata.annotations ~= nil and obj.metadata.annotations["pulumi.com/refresh"] == "true" then
+            obj.spec.refresh = true
+          end
+
+  # Enable RBAC
+  policy.default: role:readonly
+  policy.csv: |
+    p, role:admin, applications, *, */*, allow
+    p, role:admin, clusters, *, *, allow
+    p, role:admin, repositories, *, *, allow
+    g, argocd-admins, role:admin

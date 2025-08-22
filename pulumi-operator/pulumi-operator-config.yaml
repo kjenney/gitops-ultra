@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: pulumi-operator-config
-  namespace: pulumi-system
+  namespace: pulumi-kubernetes-operator
   labels:
     app.kubernetes.io/name: pulumi-operator
     app.kubernetes.io/part-of: pulumi-operator
@@ -16,7 +16,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: pulumi-api-secret
-  namespace: pulumi-system
+  namespace: pulumi-kubernetes-operator
   labels:
     app.kubernetes.io/name: pulumi-operator
     app.kubernetes.io/part-of: pulumi-operator
@@ -33,7 +33,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: aws-credentials
-  namespace: pulumi-system
+  namespace: pulumi-kubernetes-operator
   labels:
     app.kubernetes.io/name: pulumi-operator
     app.kubernetes.io/part-of: pulumi-operator

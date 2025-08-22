@@ -1,0 +1,48 @@
+# ArgoCD Service Configuration (DEPRECATED)
+
+**Note**: This file is no longer used directly. The new approach uses:
+
+1. **Inline JSON patch** in `kustomization.yaml` to change the service type to LoadBalancer
+2. **Separate ingress file** `argocd-ingress.yaml` for the Ingress resource
+
+## Why the change?
+
+The old `patchesStrategicMerge` approach was deprecated in Kustomize. The new `patches` syntax requires:
+- Specific targets for each resource
+- Separate handling of Service and Ingress resources
+
+## New Configuration
+
+- **Service patch**: Inline JSON patch in kustomization.yaml
+- **Ingress resource**: Separate file `argocd-ingress.yaml`
+
+This approach is more explicit and follows modern Kustomize best practices.
+
+---
+
+## Original content (for reference):
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: argocd-server
+  namespace: argocd
+  labels:
+    app.kubernetes.io/component: server
+    app.kubernetes.io/name: argocd-server
+    app.kubernetes.io/part-of: argocd
+spec:
+  type: LoadBalancer
+  ports:
+  - name: https
+    port: 443
+    protocol: TCP
+    targetPort: 8080
+  - name: grpc
+    port: 443
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    app.kubernetes.io/name: argocd-server
+```

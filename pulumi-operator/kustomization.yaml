@@ -1,11 +1,11 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: pulumi-system
+# Use the namespace that the Pulumi Operator v2.0 creates
+namespace: pulumi-kubernetes-operator
 
 resources:
-# Pulumi Kubernetes Operator official installation
-- https://github.com/pulumi/pulumi-kubernetes-operator/deploy/yaml
-
-patchesStrategicMerge:
+# Pulumi Kubernetes Operator v2.0 GA - Latest stable release
+- https://raw.githubusercontent.com/pulumi/pulumi-kubernetes-operator/refs/tags/v2.0.0/deploy/quickstart/install.yaml
+# Add our configuration resources as additional resources (not patches)
 - pulumi-operator-config.yaml
