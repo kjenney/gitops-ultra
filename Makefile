@@ -146,7 +146,7 @@ bootstrap-with-crd-fix:
 	
 	@echo "=== Pre-flight Checks ==="
 	@echo "Checking kubectl connectivity..."
-	@kubectl version --client --short
+	@kubectl version --client
 	@kubectl cluster-info --request-timeout=10s > /dev/null || (echo "❌ Cannot connect to Kubernetes cluster" && exit 1)
 	@echo "✅ Kubernetes cluster connectivity verified"
 	
