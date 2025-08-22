@@ -14,7 +14,7 @@ spec:
   project: default
   
   source:
-    repoURL: https://github.com/kjenney/gitops-ultra  # Replace with your Git repo
+    repoURL: https://github.com/kjenney/gitops-ultra
     targetRevision: HEAD
     path: kubernetes
     
@@ -66,7 +66,7 @@ spec:
   description: Project for MyApp infrastructure and applications
   
   sourceRepos:
-  - 'https://github.com/your-org/your-repo.git'
+  - 'https://github.com/kjenney/gitops-ultra'
   
   destinations:
   - namespace: 'myapp-*'
