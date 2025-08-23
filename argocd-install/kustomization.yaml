@@ -4,8 +4,8 @@ kind: Kustomization
 namespace: argocd
 
 resources:
-# ArgoCD official installation - v3.0.12 (latest stable)
-- https://raw.githubusercontent.com/argoproj/argo-cd/v3.0.12/manifests/install.yaml
+# ArgoCD official installation - v3.1.0 (latest stable)
+- https://raw.githubusercontent.com/argoproj/argo-cd/v3.1.0/manifests/install.yaml
 # Namespace
 - namespace.yaml
 # ArgoCD Ingress (additional resource, not a patch)
@@ -31,6 +31,6 @@ patches:
 images:
 # Use the same version for all ArgoCD components
 - name: quay.io/argoproj/argocd
-  newTag: v3.0.12
+  newTag: v3.1.0
 - name: redis
-  newTag: 7.0.15-alpine
+  newTag: 7.2.4-alpine

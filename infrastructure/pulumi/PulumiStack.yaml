@@ -1,0 +1,59 @@
+---
+# This file serves as a template/reference for the Pulumi Stack CRD
+# The actual Stack CRD is deployed via ArgoCD application in argocd/infrastructure-app.yaml
+# This file can be used for local testing or manual deployment
+
+apiVersion: pulumi.com/v1
+kind: Stack
+metadata:
+  name: myapp-infrastructure
+  namespace: pulumi-system
+  labels:
+    app.kubernetes.io/name: myapp-infrastructure
+    app.kubernetes.io/part-of: myapp
+    app.kubernetes.io/managed-by: argocd
+spec:
+  stack: dev
+  projectRepo: https://github.com/your-org/gitops-ultra  # Update with your actual repo URL
+  repoDir: infrastructure/pulumi
+  branch: main
+  
+  # Pulumi configuration matching Pulumi.dev.yaml
+  config:
+    aws:region: us-west-2
+    project:prefix: myapp-dev
+    kubernetes:namespace: myapp-dev
+  
+  # Environment variables for Pulumi execution
+  envRefs:
+    PULUMI_CONFIG_PASSPHRASE:
+      type: Secret
+      secret:
+        name: pulumi-config
+        key: passphrase
+  
+  # Refresh stack periodically to detect drift
+  refresh: true
+  
+  # Clean up AWS resources when Stack is deleted
+  destroyOnFinalize: true
+  
+  # Retry settings
+  retryOnUpdateConflict: true
+  continueResyncOnCommitMatch: false
+
+---
+# Secret for Pulumi configuration (should be created before the Stack)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pulumi-config
+  namespace: pulumi-system
+  labels:
+    app.kubernetes.io/name: pulumi-config
+    app.kubernetes.io/part-of: myapp
+type: Opaque
+data:
+  # Base64 encoded passphrase (replace with your own)
+  # Generate with: echo -n "your-secret-passphrase" | base64
+  passphrase: bXlzdXBlcnNlY3JldHBhc3NwaHJhc2U=

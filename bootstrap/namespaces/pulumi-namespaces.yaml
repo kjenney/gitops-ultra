@@ -1,0 +1,114 @@
+---
+# Pulumi Kubernetes Operator namespace with resource quotas
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pulumi-kubernetes-operator
+  labels:
+    name: pulumi-kubernetes-operator
+    app.kubernetes.io/name: pulumi-kubernetes-operator
+    app.kubernetes.io/component: namespace
+    app.kubernetes.io/managed-by: ArgoCD
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+
+---
+# Resource quota for Pulumi Kubernetes Operator namespace
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: pulumi-kubernetes-operator-quota
+  namespace: pulumi-kubernetes-operator
+  labels:
+    app.kubernetes.io/name: pulumi-kubernetes-operator-quota
+    app.kubernetes.io/component: resource-quota
+    app.kubernetes.io/managed-by: ArgoCD
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  hard:
+    requests.cpu: "2000m"
+    requests.memory: "4Gi"
+    limits.cpu: "4000m"
+    limits.memory: "8Gi"
+    persistentvolumeclaims: "5"
+    pods: "10"
+    secrets: "20"
+    configmaps: "20"
+    services: "5"
+
+---
+# Network policy for Pulumi Kubernetes Operator (if network policies are supported)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pulumi-kubernetes-operator-netpol
+  namespace: pulumi-kubernetes-operator
+  labels:
+    app.kubernetes.io/name: pulumi-kubernetes-operator-netpol
+    app.kubernetes.io/component: network-policy
+    app.kubernetes.io/managed-by: ArgoCD
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: pulumi-kubernetes-operator
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    - namespaceSelector:
+        matchLabels:
+          name: argocd
+  egress:
+  - {}  # Allow all egress for now - can be restricted based on requirements
+
+---
+# Pulumi System namespace (used by Pulumi stacks)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pulumi-system
+  labels:
+    name: pulumi-system
+    app.kubernetes.io/name: pulumi-system
+    app.kubernetes.io/component: namespace
+    app.kubernetes.io/managed-by: ArgoCD
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+
+---
+# Resource quota for Pulumi System namespace
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: pulumi-system-quota
+  namespace: pulumi-system
+  labels:
+    app.kubernetes.io/name: pulumi-system-quota
+    app.kubernetes.io/component: resource-quota
+    app.kubernetes.io/managed-by: ArgoCD
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  hard:
+    requests.cpu: "1000m"
+    requests.memory: "2Gi"
+    limits.cpu: "2000m"
+    limits.memory: "4Gi"
+    persistentvolumeclaims: "10"
+    pods: "20"
+    secrets: "50"
+    configmaps: "50"
+    services: "10"

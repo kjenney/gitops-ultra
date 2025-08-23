@@ -1,407 +1,267 @@
-# GitOps Infrastructure with ArgoCD, Pulumi Operator, and Pure Python
+# GitOps Ultra - Production-Ready GitOps with ArgoCD and Pulumi
 
-This repository provides a complete **GitOps-ready infrastructure** that combines:
+A comprehensive GitOps implementation using ArgoCD v3.1.0 and Pulumi Kubernetes Operator v2.4 with the App of Apps pattern.
 
-- 🚀 **ArgoCD** for GitOps continuous deployment
-- ⚡ **Pulumi Kubernetes Operator** for infrastructure management within Kubernetes
-- 🐍 **Pure Python Pulumi** for readable, maintainable infrastructure code
-- ☸️ **Kubernetes manifests** for application deployment
-- 🔐 **IRSA (IAM Roles for Service Accounts)** for secure AWS access
+## 🚀 Architecture Overview
 
-## 🏗️ Architecture Overview
+This project implements a production-ready GitOps architecture with:
 
-```mermaid
-graph TB
-    subgraph "Git Repository"
-        A[Python Infrastructure Code]
-        B[Kubernetes Manifests]
-        C[ArgoCD Applications]
-    end
-    
-    subgraph "Kubernetes Cluster"
-        D[ArgoCD] --> E[Pulumi Operator]
-        D --> F[Application Resources]
-        E --> G[Pure Python/Pulumi]
-        G --> H[AWS Resources]
-        F --> I[Pods with IRSA]
-        I --> H
-    end
-    
-    A --> D
-    B --> D
-    C --> D
-```
+- **ArgoCD v3.1.0** - Latest stable version with improved security
+- **Pulumi Kubernetes Operator v2.4** - Infrastructure as Code with Python
+- **App of Apps Pattern** - Hierarchical application management
+- **Pod Security Standards** - Enhanced security policies
+- **Resource Quotas** - Proper resource management
+- **RBAC** - Role-based access control
 
-## 📁 Repository Structure
+## 📋 Prerequisites
 
-```
-├── argocd-install/              # ArgoCD installation via Kustomize
-├── pulumi-operator/             # Pulumi Kubernetes Operator
-├── bootstrap/                   # Bootstrap ArgoCD applications
-├── infrastructure/              # Infrastructure as Code
-│   ├── pulumi/                  # Pure Python Pulumi program
-│   │   ├── __main__.py         # Main infrastructure program (Python)
-│   │   ├── requirements.txt    # Python dependencies
-│   │   ├── Pulumi.yaml         # Project configuration
-│   │   └── venv/               # Python virtual environment
-│   └── terraform-modules/      # Legacy Terraform modules (optional)
-├── kubernetes/                  # Kubernetes application manifests
-├── argocd/                     # ArgoCD application definitions
-├── scripts/                    # Automation scripts
-├── PYTHON-TROUBLESHOOTING.md   # Python-specific troubleshooting guide
-├── Makefile                    # Automation commands
-└── README.md                   # This documentation
-```
+- Kubernetes cluster (v1.24+)
+- kubectl configured and connected
+- kustomize (v3.0+)
+- Python 3.8+ (for Pulumi)
+- curl
+- Git
 
-## 🚀 Quick Start
+## 🔧 Quick Start
 
-### Prerequisites
+### 1. Initial Setup
 
-- **Python 3.7+** with pip
-- **Kubernetes cluster** (EKS recommended for IRSA support)
-- **kubectl** configured for your cluster
-- **AWS CLI** configured with appropriate permissions
-- **Pulumi CLI** (for local development and testing)
-
-### 1️⃣ Install Dependencies
+**⚠️ Run this first to make all scripts executable:**
 
 ```bash
-# Install all Python dependencies (creates virtual environment)
+make setup
+```
+
+### 2. Configure Your Repository
+
+**⚠️ Important: Run this second!**
+
+```bash
+make configure-repo
+```
+
+This interactive script will update all configuration files with your actual Git repository URL and settings.
+
+### 3. Install Dependencies
+
+```bash
 make install-deps
-
-# Test the installation
-make test-pulumi
 ```
 
-### 2️⃣ Validate Configuration
+### 4. Validate Configuration
 
 ```bash
-# Validate everything (Python-focused, fast)
+make quick-check
 make validate
-
-# Test locally (optional)
-make dev-pulumi-preview
 ```
 
-### 3️⃣ Bootstrap Everything
+### 5. Bootstrap Infrastructure
 
 ```bash
-# Bootstrap ArgoCD and Pulumi Operator
 make bootstrap
 ```
 
-### 4️⃣ Deploy Infrastructure and Applications
+This will:
+- Install ArgoCD v3.1.0 with production configuration
+- Deploy Pulumi Kubernetes Operator via App of Apps pattern
+- Set up namespaces with resource quotas and security policies
+- Configure proper RBAC and Pod Security Standards
+
+### 6. Deploy Infrastructure
 
 ```bash
-# Deploy everything
-make deploy-all
-
-# Or deploy step by step
-make deploy-infra    # Infrastructure via Pulumi Operator
-make deploy-k8s      # Applications via ArgoCD
+make deploy-infra
 ```
 
-### 5️⃣ Access ArgoCD UI
+This creates AWS resources (S3, SQS, IAM) using Pulumi Stack CRDs.
+
+### 7. Deploy Applications
 
 ```bash
-# Get ArgoCD access details
-make check-argocd
-
-# For local access (port forwarding)
-make dev-argocd-forward
-# Then visit: https://localhost:8080
+make deploy-k8s
 ```
 
-## 🔄 GitOps Workflow
-
-### Infrastructure Changes
-1. **Modify Python code** in `infrastructure/pulumi/__main__.py`
-2. **Test locally** with `make dev-pulumi-preview`
-3. **Validate** with `make validate`
-4. **Commit and push** to Git repository
-5. **ArgoCD detects changes** and updates Pulumi Stack CRD
-6. **Pulumi Operator executes** Python infrastructure code
-7. **AWS resources** are created/updated automatically
-
-### Application Changes
-1. **Modify Kubernetes manifests** in `kubernetes/`
-2. **Validate** with `make validate`
-3. **Commit and push** to Git repository
-4. **ArgoCD syncs changes** automatically
-5. **Applications** are updated with zero downtime
-
-## 🛠️ Pure Python Infrastructure
-
-### What's Included
-- **S3 Bucket**: Versioned, encrypted storage with IAM policies
-- **SQS Queue**: Message processing with dead letter queue
-- **IAM Roles**: IRSA-compatible roles for secure K8s access
-- **Kubernetes Resources**: Namespace, ServiceAccount, ConfigMap
-
-### Advantages of Python Implementation
-- **Readable Code**: Clean Python syntax for infrastructure
-- **Type Safety**: Full IDE support with type hints
-- **No External Dependencies**: Pure Pulumi without Terraform modules
-- **Better Error Handling**: Rich Python error reporting
-- **Easy Testing**: Standard Python testing frameworks
-
-### Example Infrastructure Code
-```python
-# Create S3 bucket with encryption
-s3_bucket = aws.s3.Bucket(
-    "data-bucket",
-    bucket=f"{prefix}-data-bucket",
-    tags=common_tags
-)
-
-s3_encryption = aws.s3.BucketServerSideEncryptionConfigurationV2(
-    "bucket-encryption",
-    bucket=s3_bucket.id,
-    rules=[aws.s3.BucketServerSideEncryptionConfigurationV2RuleArgs(
-        apply_server_side_encryption_by_default=aws.s3.BucketServerSideEncryptionConfigurationV2RuleApplyServerSideEncryptionByDefaultArgs(
-            sse_algorithm="AES256"
-        )
-    )]
-)
-```
-
-## ⚙️ Configuration
-
-### Environment Configuration
-
-Update `infrastructure/pulumi/Pulumi.dev.yaml`:
-```yaml
-config:
-  aws:region: us-west-2
-  project:prefix: myapp-dev
-  kubernetes:namespace: myapp-dev
-```
-
-### Python Development
+### 8. Verify Deployment
 
 ```bash
-# Activate virtual environment
-cd infrastructure/pulumi
-source venv/bin/activate
-
-# Install/update dependencies
-pip install -r requirements.txt
-
-# Local development commands
-pulumi preview  # Preview changes
-pulumi up       # Apply changes  
-pulumi destroy  # Cleanup resources
-
-# Or use make commands
-make dev-pulumi-preview
-make dev-pulumi-up
-make dev-pulumi-destroy
+make health-check        # Quick health check
+make status             # Detailed status
+make verify-deployment  # Comprehensive verification
 ```
 
-## 🧪 **Validation & Testing**
-
-### **New Python-Focused Validation**
-```bash
-# Primary validation (fast, Python-focused)
-make validate
-
-# Test Pulumi installation
-make test-pulumi
-
-# Validate only Python/Pulumi
-make validate-python
-
-# Legacy Terraform validation (optional)
-make validate-terraform
-```
-
-### **What's Validated**
-- ✅ Python environment and dependencies
-- ✅ Pulumi program syntax and imports
-- ✅ Kubernetes manifest syntax
-- ✅ ArgoCD configuration
-- ✅ Pulumi Operator setup
-- 🔧 Terraform modules (legacy, optional)
-
-## 🚨 Troubleshooting
-
-### Quick Fixes for Common Issues
-
-**Validation Errors**:
-```bash
-# Use the new Python-focused validation
-make validate              # Fast, Python-focused (recommended)
-make validate-terraform    # Legacy Terraform modules (optional)
-```
-
-**Package Installation Error**:
-```bash
-# The pulumi-terraform dependency issue has been fixed
-make install-deps  # Should work now
-```
-
-**Virtual Environment Issues**:
-```bash
-cd infrastructure/pulumi
-rm -rf venv  # Remove corrupted environment
-make install-deps  # Recreate everything
-```
-
-**Test Your Installation**:
-```bash
-make test-pulumi  # Comprehensive test
-```
-
-### Detailed Troubleshooting
-See **[PYTHON-TROUBLESHOOTING.md](PYTHON-TROUBLESHOOTING.md)** for comprehensive troubleshooting guide including:
-- Package installation errors
-- Virtual environment issues
-- Pulumi configuration problems
-- Validation error solutions
-- EKS/IRSA setup issues
-- Development workflow tips
-
-### Debug Commands
+### 9. Troubleshooting
 
 ```bash
-# Test installation
-make test-pulumi
-
-# Validate configuration
-make validate
-
-# Comprehensive status check
-make status
-
-# Component-specific troubleshooting
-./scripts/troubleshoot.sh python     # Python/Pulumi issues
-./scripts/troubleshoot.sh aws        # AWS resource issues
-./scripts/troubleshoot.sh all        # Comprehensive check
+make troubleshoot       # Interactive troubleshooting guide
 ```
+
+## 🏗️ Architecture Details
+
+### App of Apps Pattern
+
+```
+bootstrap/bootstrap-apps.yaml (Root App of Apps)
+├── bootstrap/core/namespaces.yaml (Wave 0)
+├── bootstrap/core/pulumi-operator.yaml (Wave 1)  
+└── bootstrap/core/infrastructure.yaml (Wave 2)
+    └── infrastructure/stacks/ (Wave 3)
+```
+
+### Directory Structure
+
+```
+gitops-ultra/
+├── Makefile                    # Main automation
+├── README.md                   # This file
+├── argocd/                     # Application definitions
+│   ├── infrastructure-app.yaml
+│   └── kubernetes-app.yaml
+├── argocd-install/             # ArgoCD installation
+│   ├── kustomization.yaml
+│   ├── namespace.yaml
+│   └── patches/
+├── bootstrap/                  # Bootstrap applications
+│   ├── bootstrap-apps.yaml     # Root App of Apps
+│   ├── core/                   # Core component apps
+│   │   ├── pulumi-operator.yaml
+│   │   ├── namespaces.yaml
+│   │   └── infrastructure.yaml
+│   └── namespaces/             # Namespace definitions
+├── infrastructure/             # Infrastructure as Code
+│   ├── pulumi/                 # Pulumi Python code
+│   │   ├── __main__.py
+│   │   └── requirements.txt
+│   └── stacks/                 # Pulumi Stack CRDs
+│       └── infrastructure-stack.yaml
+├── kubernetes/                 # K8s application manifests
+└── scripts/                    # Helper scripts
+    ├── configure-repo.sh
+    └── verify-deployment.sh
+```
+
+## 🔐 Security Features
+
+- **Pod Security Standards**: Enforced at namespace level
+- **Resource Quotas**: CPU/Memory limits per namespace  
+- **Network Policies**: Traffic segmentation (where supported)
+- **RBAC**: Proper role-based access control
+- **Security Contexts**: Non-root containers, read-only filesystems
+- **IRSA Support**: AWS IAM Roles for Service Accounts
 
 ## 📊 Monitoring and Observability
 
-### ArgoCD Monitoring
-- **Application health** via ArgoCD UI
-- **Sync status** and drift detection
-- **Resource-level** health checks
-
-### Infrastructure Monitoring
-- **Pulumi Stack status** via Kubernetes CRDs
-- **AWS CloudWatch** integration
-- **Cost tracking** via AWS billing
-
-### Application Monitoring
-- **Kubernetes metrics** via kubectl/dashboard
-- **Health checks** (liveness/readiness probes)
-- **Log aggregation** via your logging solution
-
-## 🔧 Customization
-
-### Adding New AWS Resources
-
-1. **Add resources** in `infrastructure/pulumi/__main__.py`:
-```python
-# Example: Add RDS database
-rds_instance = aws.rds.Instance(
-    "database",
-    instance_class="db.t3.micro",
-    engine="postgres",
-    # ... other configuration
-)
-```
-
-2. **Export outputs** for Kubernetes:
-```python
-pulumi.export("database_endpoint", rds_instance.endpoint)
-```
-
-3. **Update ConfigMap** to include new resource info
-
-### Multi-Environment Setup
+### Quick Health Checks
 
 ```bash
-# Create production stack
-cd infrastructure/pulumi
-source venv/bin/activate
-pulumi stack init prod
-pulumi config set aws:region us-east-1
-pulumi config set project:prefix myapp-prod
+make health-check         # Quick health overview
+make status              # Detailed component status
+make verify-deployment   # Comprehensive verification
 ```
 
-## 🧹 Cleanup
+### ArgoCD Access
 
 ```bash
-# Clean up everything
-make clean
-
-# Or use the comprehensive cleanup script
-./scripts/clean-uninstall.sh
+make check-argocd
 ```
 
-## 🏗️ **Legacy Terraform Modules**
+This provides:
+- Admin credentials
+- Port forwarding instructions
+- LoadBalancer/Ingress URLs (if configured)
 
-The `infrastructure/terraform-modules/` directory contains legacy Terraform modules that are **no longer used** in the active deployment. They are kept for reference and can be safely ignored or deleted.
+### Status Checking
 
-- **Current**: Pure Python Pulumi (`infrastructure/pulumi/__main__.py`)
-- **Legacy**: Terraform modules (`infrastructure/terraform-modules/`)
-- **Validation**: `make validate` focuses on Python, `make validate-terraform` for legacy
-
-## 🐍 Python Development Best Practices
-
-### Code Quality
-- **Type Hints**: Use type annotations for better IDE support
-- **Documentation**: Add docstrings to functions
-- **Testing**: Use pytest for infrastructure tests
-- **Formatting**: Use black for code formatting
-
-### Virtual Environment Management
-- **Always activate** virtual environment before Pulumi commands
-- **Pin versions** in requirements.txt for reproducibility
-- **Separate environments** for different projects
-
-### Development Workflow
 ```bash
-# 1. Activate environment
-cd infrastructure/pulumi && source venv/bin/activate
-
-# 2. Make changes to __main__.py
-
-# 3. Test syntax
-python -m py_compile __main__.py
-
-# 4. Validate everything
-make validate
-
-# 5. Preview changes
-pulumi preview
-
-# 6. Commit and let GitOps deploy
-git add . && git commit -m "Update infrastructure"
+make status                    # Overall status
+make verify-deployment        # Comprehensive verification
+kubectl get applications -n argocd  # ArgoCD apps
+kubectl get stacks -n pulumi-system # Pulumi stacks
 ```
+
+### Troubleshooting
+
+```bash
+make troubleshoot         # Interactive troubleshooting guide
+```
+
+Targeted troubleshooting:
+```bash
+./scripts/troubleshoot.sh argocd    # ArgoCD issues
+./scripts/troubleshoot.sh pulumi    # Pulumi Operator issues
+./scripts/troubleshoot.sh all       # Check all common issues
+```
+
+## 🛠️ Development and Troubleshooting
+
+### Local Development
+
+```bash
+make dev-argocd-forward       # Forward ArgoCD UI
+make dev-logs-infrastructure  # Follow Pulumi logs
+make dev-logs-argocd         # Follow ArgoCD logs
+```
+
+### Validation
+
+```bash
+make validate-python         # Validate Pulumi configuration
+make test-pulumi            # Test Pulumi installation
+```
+
+### Cleanup
+
+```bash
+make clean                  # Remove all resources
+```
+
+## 🔄 Sync Waves
+
+Applications are deployed in waves to ensure proper dependency order:
+
+- **Wave 0**: Namespaces, resource quotas, security policies
+- **Wave 1**: Core operators (Pulumi Kubernetes Operator)
+- **Wave 2**: Bootstrap infrastructure applications  
+- **Wave 3**: Actual infrastructure stacks (AWS resources)
+
+## 🆕 What's New in This Version
+
+### Improvements Over Previous Versions
+
+1. **App of Apps Pattern**: Better organization and dependency management
+2. **ArgoCD v3.1.0**: Latest stable with security enhancements
+3. **Resource Management**: Proper quotas and limits
+4. **Security Hardening**: Pod Security Standards, RBAC, security contexts
+5. **Pulumi Stack CRDs**: Cleaner separation of infrastructure definitions
+6. **Configuration Script**: Easy repository setup
+7. **Enhanced Validation**: Comprehensive pre-flight checks
+
+### Migration from v3.0.12
+
+The project now uses ArgoCD v3.1.0 and the App of Apps pattern. If upgrading:
+
+1. Run `make configure-repo` to update configurations
+2. Review the new bootstrap structure
+3. Update any custom applications to use the new pattern
 
 ## 🤝 Contributing
 
-1. **Fork the repository**
-2. **Create feature branch** (`git checkout -b feature/amazing-feature`)
-3. **Setup Python environment** (`make install-deps`)
-4. **Test and validate** (`make test-pulumi && make validate`)
-5. **Commit changes** (`git commit -m 'Add amazing feature'`)
-6. **Push to branch** (`git push origin feature/amazing-feature`)
-7. **Open Pull Request**
+1. Fork the repository
+2. Run `make configure-repo` with your repository details
+3. Make your changes
+4. Test with `make validate` and `make verify-deployment`
+5. Submit a pull request
 
 ## 📚 Additional Resources
 
-- [Pulumi Python Documentation](https://www.pulumi.com/docs/intro/languages/python/)
-- [Pulumi AWS Provider](https://www.pulumi.com/registry/packages/aws/)
 - [ArgoCD Documentation](https://argo-cd.readthedocs.io/)
 - [Pulumi Kubernetes Operator](https://github.com/pulumi/pulumi-kubernetes-operator)
-- [AWS IAM Roles for Service Accounts](https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html)
+- [GitOps Principles](https://opengitops.dev/)
+- [CNCF App of Apps Pattern](https://argo-cd.readthedocs.io/en/stable/operator-manual/cluster-bootstrapping/)
 
-## 📄 License
+## 🆘 Support
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-**🐍🚀 Ready to deploy Python-powered GitOps infrastructure? Run `make install-deps && make validate && make deploy-all`!**
+For issues and questions:
+1. Check the troubleshooting section in `scripts/troubleshoot.sh`
+2. Run `make verify-deployment` for diagnostic information
+3. Review ArgoCD application status in the UI
+4. Check logs with the development commands

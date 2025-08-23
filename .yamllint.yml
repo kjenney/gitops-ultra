@@ -1,0 +1,59 @@
+# YAML Lint Configuration for GitOps Ultra
+extends: default
+
+rules:
+  # Line length
+  line-length:
+    max: 120
+    level: warning
+
+  # Indentation  
+  indentation:
+    spaces: 2
+    indent-sequences: true
+    check-multi-line-strings: false
+
+  # Comments
+  comments:
+    min-spaces-from-content: 1
+
+  # Document start
+  document-start:
+    present: false
+
+  # Trailing spaces
+  trailing-spaces: enable
+
+  # Empty lines
+  empty-lines:
+    max: 2
+    max-start: 1
+    max-end: 1
+
+  # Brackets
+  brackets:
+    min-spaces-inside: 0
+    max-spaces-inside: 1
+
+  # Braces  
+  braces:
+    min-spaces-inside: 0
+    max-spaces-inside: 1
+
+  # Quotation marks
+  quoted-strings:
+    quote-type: double
+    required: only-when-needed
+
+  # Truthy values
+  truthy:
+    allowed-values: ['true', 'false']
+    check-keys: true
+
+# Ignore certain files/directories
+ignore: |
+  .github/
+  examples/production-config/
+  infrastructure/pulumi/venv/
+  infrastructure/pulumi/__pycache__/
+  *.md

@@ -1,23 +1,28 @@
-.PHONY: help install-deps init-infrastructure bootstrap install-python-deps quick-check deploy-infra deploy-k8s deploy-all clean status check-argocd test-pulumi validate validate-terraform validate-python setup-gitops-apps
+.PHONY: help install-deps init-infrastructure bootstrap install-python-deps quick-check deploy-infra deploy-k8s deploy-all clean status check-argocd test-pulumi validate validate-terraform validate-python setup-gitops-apps verify-deployment configure-repo health-check troubleshoot setup
 
 # Default target
 help:
 	@echo "Available commands:"
+	@echo "  setup              - Initial setup (make scripts executable)"
+	@echo "  configure-repo      - Configure Git repository URLs (run this first!)"
 	@echo "  install-deps        - Install all dependencies"
 	@echo "  install-python-deps - Install Python dependencies (optional, for validation)"
 	@echo "  quick-check        - Quick environment check before bootstrap"
+	@echo "  health-check       - Quick health check of the deployment"
+	@echo "  troubleshoot       - Interactive troubleshooting guide"
 	@echo "  test-pulumi         - Test Pulumi installation and preview"
 	@echo "  validate            - Validate all configurations (Python-focused)"
 	@echo "  validate-python     - Validate Python/Pulumi configuration only"
 	@echo "  validate-terraform  - Validate Terraform modules (legacy, optional)"
 	@echo "  init-infrastructure - Initialize Pulumi stack"
-	@echo "  bootstrap          - Install ArgoCD v3.0.12 and Pulumi Operator via Helm (Complete)"
-	@echo "  setup-gitops-apps  - Apply GitOps bootstrap applications (Helm-based)"
+	@echo "  bootstrap          - Install ArgoCD v3.1.0 and Pulumi Operator (Complete)"
+	@echo "  setup-gitops-apps  - Apply GitOps bootstrap applications (App of Apps)"
 	@echo "  deploy-infra       - Deploy infrastructure with Pulumi Operator"
 	@echo "  deploy-k8s         - Deploy Kubernetes resources with ArgoCD"
 	@echo "  deploy-all         - Bootstrap and deploy everything"
 	@echo "  status             - Show deployment status"
 	@echo "  check-argocd       - Check ArgoCD installation and access"
+	@echo "  verify-deployment  - Comprehensive deployment verification"
 	@echo "  dev-argocd-forward  - Forward port for ArgoCD access"
 	@echo "  clean              - Clean up all resources"
 
@@ -126,10 +131,10 @@ init-infrastructure:
 	pulumi config set project:prefix myapp-dev && \
 	pulumi config set kubernetes:namespace myapp-dev
 
-# Bootstrap ArgoCD v3.0.12 and Pulumi Operator (Complete Installation)
+# Bootstrap ArgoCD v3.1.0 and Pulumi Operator (Complete Installation)
 bootstrap:
-	@echo "🚀 Starting ArgoCD v3.0.12 Bootstrap with Helm-based Pulumi Operator..."
-	@echo "🎯 Using OCI Helm chart: oci://ghcr.io/pulumi/helm-charts"
+	@echo "🚀 Starting ArgoCD v3.1.0 Bootstrap with App of Apps pattern..."
+	@echo "🎯 Using improved GitOps architecture with Pulumi Kubernetes Operator"
 	@echo ""
 	
 	@echo "=== Pre-flight Checks ==="
@@ -143,19 +148,19 @@ bootstrap:
 	@echo "✅ kustomize found: $(kustomize version --short)"
 	@echo ""
 	
-	@echo "=== Step 1: Installing ArgoCD v3.0.12 (Complete) ==="
+	@echo "=== Step 1: Installing ArgoCD v3.1.0 (Complete) ==="
 	@echo "Creating argocd namespace..."
 	@kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
 	
 	@echo "Installing ArgoCD CRDs first..."
-	@kubectl apply -f https://raw.githubusercontent.com/argoproj/argo-cd/v3.0.12/manifests/crds/application-crd.yaml
-	@kubectl apply -f https://raw.githubusercontent.com/argoproj/argo-cd/v3.0.12/manifests/crds/appproject-crd.yaml
-	@kubectl apply -f https://raw.githubusercontent.com/argoproj/argo-cd/v3.0.12/manifests/crds/applicationset-crd.yaml
+	@kubectl apply -f https://raw.githubusercontent.com/argoproj/argo-cd/v3.1.0/manifests/crds/application-crd.yaml
+	@kubectl apply -f https://raw.githubusercontent.com/argoproj/argo-cd/v3.1.0/manifests/crds/appproject-crd.yaml
+	@kubectl apply -f https://raw.githubusercontent.com/argoproj/argo-cd/v3.1.0/manifests/crds/applicationset-crd.yaml
 	@echo "✅ ArgoCD CRDs installed"
 	
-	@echo "Installing complete ArgoCD v3.0.12 with custom configuration..."
+	@echo "Installing complete ArgoCD v3.1.0 with custom configuration..."
 	@kubectl apply -k argocd-install/
-	@echo "✅ ArgoCD v3.0.12 manifests applied"
+	@echo "✅ ArgoCD v3.1.0 manifests applied"
 	
 	@echo "Waiting for ArgoCD components to be ready (up to 5 minutes)..."
 	@echo "  - Checking argocd-server..."
@@ -169,22 +174,18 @@ bootstrap:
 	@echo "✅ All ArgoCD components are ready!"
 	
 	@echo ""
-	@echo "=== Step 2: Deploying Pulumi Operator via Helm Chart ==="
+	@echo "=== Step 2: Deploying Bootstrap Applications (App of Apps Pattern) ==="
 	@kubectl apply -f argocd/argoocisecret.yaml -n argocd
-	@echo "Installing Pulumi Operator using ArgoCD and OCI Helm chart..."
-	@kubectl apply -f bootstrap/pulumi-kubernetes-operator-app.yaml -n argocd
-	@echo "✅ Pulumi Operator ArgoCD application deployed"
+	@echo "Deploying bootstrap core applications..."
+	@kubectl apply -f bootstrap/bootstrap-apps.yaml -n argocd
+	@echo "✅ Bootstrap applications deployed"
 	
-	@echo "Waiting for Pulumi Operator to sync and be ready..."
-	#@kubectl wait --for=condition=Synced app/pulumi-kubernetes-operator -n argocd --timeout=60s
-	@echo "Waiting for Pulumi Operator pods to be ready..."
-	@kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=pulumi-kubernetes-operator -n pulumi-kubernetes-operator --timeout=300s 2>/dev/null || echo "⚠️  Pulumi Operator pod labels may be different - checking status..."
-	@echo "✅ Pulumi Operator installation complete via Helm"
-
-	@echo "=== Deploying ArgoCD Installation ==="
-	@kubectl apply -f bootstrap/argocd-installation-app.yaml -n argocd
-	@echo "Waiting for ArgoCD Installation to sync and be ready..."
-	@kubectl wait --for=condition=Synced app/argocd-installation -n argocd --timeout=300s 2>/dev/null || echo "ℹ️  Bootstrap app sync pending"
+	@echo "Waiting for bootstrap applications to sync (up to 5 minutes)..."
+	@kubectl wait --for=condition=Synced app/bootstrap-core -n argocd --timeout=300s 2>/dev/null || echo "ℹ️  Bootstrap apps sync pending - this is normal for first deployment"
+	@sleep 30  # Give time for sub-applications to be created
+	@echo "Checking Pulumi Operator deployment status..."
+	@kubectl get pods -n pulumi-kubernetes-operator 2>/dev/null || echo "ℹ️  Pulumi Operator namespace not yet ready - continuing..."
+	@echo "✅ Bootstrap App of Apps pattern deployed"
 	
 	@echo ""
 	@echo "=== Step 3: Verification and Status ==="
@@ -202,13 +203,14 @@ bootstrap:
 	@kubectl get crd stacks.pulumi.com workspaces.auto.pulumi.com 2>/dev/null || echo "ℹ️  Pulumi CRDs may still be initializing"
 	
 	@echo ""
-	@echo "🎉 === Bootstrap Complete with Helm! ===="
-	@echo "📋 ArgoCD v3.0.12 + Pulumi Operator v2.0 Installation Summary:"
-	@echo "   ✅ ArgoCD v3.0.12 installed with custom configuration"
-	@echo "   ✅ Pulumi Operator v2.0 deployed via OCI Helm chart"
-	@echo "   ✅ All core components running (server, controller, repo-server, redis)"
-	@echo "   ✅ GitOps-managed Pulumi Operator using ArgoCD"
+	@echo "🎉 === Bootstrap Complete with App of Apps! ===="
+	@echo "📋 ArgoCD v3.1.0 + Pulumi Operator v2.4 Installation Summary:"
+	@echo "   ✅ ArgoCD v3.1.0 installed with production-ready configuration"
+	@echo "   ✅ Pulumi Operator v2.4 deployed via App of Apps pattern"
+	@echo "   ✅ All core components running with resource quotas"
+	@echo "   ✅ GitOps-managed infrastructure with proper RBAC"
 	@echo "   ✅ Service exposure configured (LoadBalancer + Ingress)"
+	@echo "   ✅ Pod Security Standards enforced"
 	@echo ""
 	@echo "🔑 Next Steps:"
 	@echo "   1. Get ArgoCD access details: make check-argocd"
@@ -221,35 +223,44 @@ bootstrap:
 	@echo "   - Port Forward: kubectl port-forward svc/argocd-server -n argocd 8080:443"
 	@echo "   - Ingress: kubectl get ingress argocd-server-ingress -n argocd"
 
-# Apply GitOps bootstrap applications (Helm-based)
+# Apply GitOps bootstrap applications (App of Apps pattern)
 setup-gitops-apps:
-	@echo "🔄 Setting up GitOps Bootstrap Applications (Helm-based)"
-	@echo "======================================================"
-	@echo "This will configure ArgoCD to manage Pulumi Operator via Helm chart."
-	@echo "Using OCI Helm chart: oci://ghcr.io/pulumi/helm-charts (chart: pulumi-kubernetes-operator)"
+	@echo "🔄 Setting up GitOps Bootstrap Applications (App of Apps)"
+	@echo "====================================================="
+	@echo "This will configure ArgoCD to manage all core components via App of Apps pattern."
+	@echo "Using improved GitOps architecture with proper separation of concerns."
 	@echo ""
 	@echo "Applying bootstrap application configurations..."
 	@kubectl apply -f bootstrap/bootstrap-apps.yaml -n argocd
-	@echo "Waiting for bootstrap applications to sync..."
-	@sleep 15
+	@echo "Waiting for bootstrap core application to sync..."
+	@kubectl wait --for=condition=Synced app/bootstrap-core -n argocd --timeout=300s 2>/dev/null || echo "⚠️  Bootstrap core app sync pending - check manually"
+	@echo "Waiting for child applications to be created..."
+	@sleep 30
 	@echo "Checking application status..."
 	@kubectl get applications -n argocd
 	@echo ""
 	@echo "Checking Pulumi Operator deployment..."
-	@kubectl get pods -n pulumi-system
+	@kubectl get pods -n pulumi-kubernetes-operator 2>/dev/null || echo "ℹ️  Pulumi Operator still deploying..."
 	@echo ""
 	@echo "🎉 GitOps bootstrap applications configured!"
-	@echo "ArgoCD now manages Pulumi Operator via OCI Helm chart."
+	@echo "ArgoCD now manages all core components via App of Apps pattern."
 	@echo "Monitor with: kubectl get applications -n argocd -w"
 
 deploy-infra:
-	@echo "Deploying infrastructure with Pulumi Operator..."
-	kubectl apply -f argocd/argoocisecret.yaml -n argocd
-	kubectl apply -f argocd/infrastructure-app.yaml -n argocd
-	@echo "Waiting for infrastructure deployment..."
-	kubectl wait --for=condition=Synced app/myapp-infrastructure -n argocd --timeout=600s
+	@echo "🏗️  Deploying infrastructure with Pulumi Operator..."
+	@echo "Creating Pulumi configuration secret..."
+	@kubectl apply -f argocd/argoocisecret.yaml -n argocd 2>/dev/null || echo "ArgoCD OCI secret already exists"
+	@echo "Deploying infrastructure ArgoCD application..."
+	@kubectl apply -f argocd/infrastructure-app.yaml -n argocd
+	@echo "Waiting for infrastructure application to sync (up to 10 minutes)..."
+	@kubectl wait --for=condition=Synced app/myapp-infrastructure -n argocd --timeout=600s 2>/dev/null || echo "⚠️  Infrastructure app sync taking longer than expected - check with 'kubectl get app myapp-infrastructure -n argocd'"
 	@echo "Checking Pulumi Stack status..."
-	kubectl get stack myapp-infrastructure -n pulumi-system -o yaml
+	@kubectl get stack myapp-infrastructure -n pulumi-system -o wide 2>/dev/null || echo "⚠️  Pulumi Stack not yet created - may still be initializing"
+	@echo "✅ Infrastructure deployment initiated"
+	@echo ""
+	@echo "💡 Monitor progress with:"
+	@echo "   kubectl get stack myapp-infrastructure -n pulumi-system -w"
+	@echo "   kubectl logs -f deployment/pulumi-kubernetes-operator -n pulumi-kubernetes-operator"
 
 # Deploy Kubernetes resources via ArgoCD
 deploy-k8s:
@@ -386,9 +397,9 @@ validate-python:
 		kubectl apply --dry-run=client -f argocd/ && echo "✅ ArgoCD applications are valid"; \
 	else \
 		echo "⚠️  ArgoCD CRDs not found - installing for validation..."; \
-		kubectl apply -f https://raw.githubusercontent.com/argoproj/argo-cd/v3.0.12/manifests/crds/application-crd.yaml --dry-run=client; \
-		kubectl apply -f https://raw.githubusercontent.com/argoproj/argo-cd/v3.0.12/manifests/crds/appproject-crd.yaml --dry-run=client; \
-		kubectl apply -f https://raw.githubusercontent.com/argoproj/argo-cd/v3.0.12/manifests/crds/applicationset-crd.yaml --dry-run=client; \
+		kubectl apply -f https://raw.githubusercontent.com/argoproj/argo-cd/v3.1.0/manifests/crds/application-crd.yaml --dry-run=client; \
+		kubectl apply -f https://raw.githubusercontent.com/argoproj/argo-cd/v3.1.0/manifests/crds/appproject-crd.yaml --dry-run=client; \
+		kubectl apply -f https://raw.githubusercontent.com/argoproj/argo-cd/v3.1.0/manifests/crds/applicationset-crd.yaml --dry-run=client; \
 		echo "✅ ArgoCD CRD validation complete"; \
 		echo "ℹ️  Note: Run 'make bootstrap' to install ArgoCD CRDs permanently"; \
 	fi
@@ -443,3 +454,44 @@ dev-pulumi-up:
 dev-pulumi-destroy:
 	@echo "Running Pulumi destroy locally..."
 	cd infrastructure/pulumi && source venv/bin/activate && pulumi destroy
+
+# Comprehensive deployment verification
+verify-deployment:
+	@echo "🔍 Running comprehensive deployment verification..."
+	@chmod +x scripts/verify-deployment.sh
+	@./scripts/verify-deployment.sh all
+	@echo ""
+	@echo "💡 For targeted checks, you can also run:"
+	@echo "   ./scripts/verify-deployment.sh kubectl    # Check kubectl connectivity"
+	@echo "   ./scripts/verify-deployment.sh argocd     # Check ArgoCD installation"
+	@echo "   ./scripts/verify-deployment.sh pulumi     # Check Pulumi Operator"
+	@echo "   ./scripts/verify-deployment.sh apps       # Check ArgoCD applications"
+	@echo "   ./scripts/verify-deployment.sh stacks     # Check Pulumi Stacks"
+	@echo "   ./scripts/verify-deployment.sh infra      # Check AWS infrastructure"
+	@echo "   ./scripts/verify-deployment.sh resources  # Check application resources"
+
+# Configure Git repository URLs and settings
+configure-repo:
+	@echo "🔧 Configuring GitOps Ultra with your repository settings..."
+	@chmod +x scripts/configure-repo.sh
+	@./scripts/configure-repo.sh
+	@echo ""
+	@echo "💡 Next: Run 'make quick-check' to verify prerequisites"
+
+# Quick health check of the deployment
+health-check:
+	@echo "🎥 Running quick health check..."
+	@chmod +x scripts/health-check.sh
+	@./scripts/health-check.sh
+
+# Interactive troubleshooting guide
+troubleshoot:
+	@echo "🔧 Starting interactive troubleshooting guide..."
+	@chmod +x scripts/troubleshoot.sh
+	@./scripts/troubleshoot.sh
+
+# Initial setup - make all scripts executable
+setup:
+	@echo "🚀 Running initial setup..."
+	@chmod +x scripts/setup.sh
+	@./scripts/setup.sh

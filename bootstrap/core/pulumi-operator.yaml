@@ -1,3 +1,5 @@
+---
+# Pulumi Kubernetes Operator deployment via Helm chart
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -6,6 +8,7 @@ metadata:
   labels:
     app.kubernetes.io/name: pulumi-kubernetes-operator
     app.kubernetes.io/component: operator
+    app.kubernetes.io/part-of: bootstrap
   annotations:
     argocd.argoproj.io/sync-wave: "1"
   finalizers:
@@ -13,39 +16,44 @@ metadata:
 spec:
   project: default
   source:
-    # Using OCI registry for Helm chart (note: no oci:// prefix)
+    # Using OCI registry for Helm chart
     chart: pulumi-kubernetes-operator
     repoURL: ghcr.io/pulumi/helm-charts
-    targetRevision: 2.2.0  # Latest stable version
+    targetRevision: 2.4.0  # Updated to latest stable version
     helm:
-      # Helm values to customize the deployment
       values: |
         # Operator configuration
         operator:
           image:
             repository: pulumi/pulumi-kubernetes-operator
-            tag: ""  # Uses chart appVersion
+            tag: ""  # Uses chart appVersion (v1.17.0)
             pullPolicy: IfNotPresent
           
           # Resource limits for the operator
           resources:
             limits:
-              cpu: 500m
-              memory: 512Mi
+              cpu: 1000m
+              memory: 1Gi
             requests:
-              cpu: 100m
-              memory: 128Mi
+              cpu: 200m
+              memory: 256Mi
           
           # Environment variables
           env:
             - name: PULUMI_K8S_AWAIT_ALL
               value: "true"
+            - name: PULUMI_K8S_DELETE_UNREACHABLE
+              value: "true"
+            - name: PULUMI_BACKEND_URL
+              value: "file:///tmp"  # Use file backend by default
         
         # Service account configuration
         serviceAccount:
           create: true
           name: pulumi-kubernetes-operator
-          annotations: {}
+          annotations:
+            # Add IRSA annotation if using AWS EKS
+            # eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/pulumi-operator-role
         
         # RBAC configuration
         rbac:
@@ -56,6 +64,8 @@ spec:
           runAsNonRoot: true
           runAsUser: 1000
           fsGroup: 1000
+          seccompProfile:
+            type: RuntimeDefault
         
         # Security context for containers
         securityContext:
@@ -64,17 +74,51 @@ spec:
             drop:
               - ALL
           readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
         
         # Node selector, tolerations, and affinity
         nodeSelector: {}
         tolerations: []
-        affinity: {}
+        affinity:
+          podAntiAffinity:
+            preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: pulumi-kubernetes-operator
+                topologyKey: kubernetes.io/hostname
         
-        # Metrics configuration
+        # Metrics and monitoring configuration
         metrics:
           enabled: true
           serviceMonitor:
             enabled: false  # Set to true if using Prometheus Operator
+        
+        # Health check configuration
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+          
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        
+        # Additional configuration
+        extraVolumes:
+        - name: tmp
+          emptyDir: {}
+        
+        extraVolumeMounts:
+        - name: tmp
+          mountPath: /tmp
   
   destination:
     server: https://kubernetes.default.svc
@@ -109,6 +153,7 @@ spec:
       kind: Deployment
       jsonPointers:
         - /spec/replicas
+        - /status
   
   # Application health and status
   revisionHistoryLimit: 10

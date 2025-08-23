@@ -1,0 +1,117 @@
+---
+# Pulumi configuration secret for AWS credentials and state encryption
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pulumi-config
+  namespace: pulumi-system
+  labels:
+    app.kubernetes.io/name: pulumi-config
+    app.kubernetes.io/component: secret
+    app.kubernetes.io/part-of: myapp
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+type: Opaque
+data:
+  # Base64 encoded passphrase for Pulumi state encryption
+  # To generate: echo -n "your-secret-passphrase" | base64
+  # Default: "myapp-dev-secret-passphrase"
+  passphrase: bXlhcHAtZGV2LXNlY3JldC1wYXNzcGhyYXNl
+  # AWS credentials (optional - prefer IRSA for production)
+  # aws_access_key_id: <base64-encoded-access-key>
+  # aws_secret_access_key: <base64-encoded-secret-key>
+
+---
+# Pulumi Stack Custom Resource - deploys AWS infrastructure
+apiVersion: pulumi.com/v1
+kind: Stack
+metadata:
+  name: myapp-infrastructure
+  namespace: pulumi-system
+  labels:
+    app.kubernetes.io/name: myapp-infrastructure
+    app.kubernetes.io/component: infrastructure-stack
+    app.kubernetes.io/part-of: myapp
+    environment: dev
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  # Pulumi stack configuration
+  stack: dev
+  projectRepo: git@github.com:your-org/gitops-ultra.git  # TODO: Update with actual repo URL
+  repoDir: infrastructure/pulumi
+  branch: main  # or master, depending on your default branch
+  
+  # Pulumi program configuration
+  config:
+    aws:region: us-west-2
+    project:prefix: myapp-dev
+    kubernetes:namespace: myapp-dev
+  
+  # For private repositories, uncomment and configure:
+  # accessTokenSecret: github-access-token
+  
+  # Environment variables for the Pulumi program
+  envRefs:
+    PULUMI_CONFIG_PASSPHRASE:
+      type: Secret
+      secret:
+        name: pulumi-config
+        key: passphrase
+    # AWS credentials (optional - prefer IRSA in production)
+    # AWS_ACCESS_KEY_ID:
+    #   type: Secret
+    #   secret:
+    #     name: pulumi-config
+    #     key: aws_access_key_id
+    # AWS_SECRET_ACCESS_KEY:
+    #   type: Secret
+    #   secret:
+    #     name: pulumi-config
+    #     key: aws_secret_access_key
+  
+  # Stack management options
+  refresh: true              # Refresh stack on each reconciliation
+  destroyOnFinalize: true    # Clean up AWS resources when Stack CR is deleted
+  continueResyncOnCommitMatch: false  # Always re-sync even if commit hasn't changed
+  retryOnUpdateConflict: true         # Retry if there's a conflict during update
+  
+  # Git polling interval (optional, defaults to repository webhook)
+  # gitPollingInterval: 60s
+  
+  # Prerequisites and dependencies
+  prerequisites:
+    - pulumi-kubernetes-operator
+
+---
+# Service account for applications to access AWS resources (if using IRSA)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: myapp-aws-service-account
+  namespace: myapp-dev
+  labels:
+    app.kubernetes.io/name: myapp-aws-service-account
+    app.kubernetes.io/component: service-account
+    app.kubernetes.io/part-of: myapp
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+    # IRSA annotation (will be populated by Pulumi stack)
+    # eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/myapp-dev-k8s-service-role
+
+---
+# Namespace for the application (created by Pulumi, but defined here for ArgoCD)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: myapp-dev
+  labels:
+    name: myapp-dev
+    app.kubernetes.io/name: myapp-dev
+    app.kubernetes.io/component: namespace
+    app.kubernetes.io/managed-by: Pulumi
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"

@@ -1,0 +1,240 @@
+---
+# Loki logging stack deployment via ArgoCD
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: logging-stack
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: logging-stack
+    app.kubernetes.io/component: logging
+    app.kubernetes.io/part-of: observability
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  
+  source:
+    # Using Grafana Helm Charts for Loki
+    chart: loki-stack
+    repoURL: https://grafana.github.io/helm-charts
+    targetRevision: 2.9.11  # Latest stable version
+    helm:
+      values: |
+        # Loki Configuration
+        loki:
+          enabled: true
+          persistence:
+            enabled: true
+            size: 50Gi
+            storageClassName: gp2
+          config:
+            auth_enabled: false
+            server:
+              http_listen_port: 3100
+            ingester:
+              lifecycler:
+                address: 127.0.0.1
+                ring:
+                  kvstore:
+                    store: inmemory
+                  replication_factor: 1
+                final_sleep: 0s
+              chunk_idle_period: 5m
+              chunk_retain_period: 30s
+            schema_config:
+              configs:
+                - from: 2020-10-24
+                  store: boltdb
+                  object_store: filesystem
+                  schema: v11
+                  index:
+                    prefix: index_
+                    period: 168h
+            storage_config:
+              boltdb:
+                directory: /data/loki/index
+              filesystem:
+                directory: /data/loki/chunks
+            limits_config:
+              enforce_metric_name: false
+              reject_old_samples: true
+              reject_old_samples_max_age: 168h
+              retention_period: 744h  # 31 days
+          resources:
+            limits:
+              cpu: 500m
+              memory: 1Gi
+            requests:
+              cpu: 200m
+              memory: 512Mi
+
+        # Promtail Configuration (log collector)
+        promtail:
+          enabled: true
+          config:
+            clients:
+              - url: http://loki:3100/loki/api/v1/push
+            scrape_configs:
+              # Kubernetes pod logs
+              - job_name: kubernetes-pods
+                kubernetes_sd_configs:
+                  - role: pod
+                relabel_configs:
+                  - source_labels: [__meta_kubernetes_pod_controller_name]
+                    regex: ([0-9a-z-.]+?)(-[0-9a-f]{8,10})?
+                    target_label: __tmp_controller_name
+                  - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+                    target_label: app
+                  - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_component]
+                    target_label: component
+                  - source_labels: [__meta_kubernetes_namespace]
+                    target_label: namespace
+                  - source_labels: [__meta_kubernetes_pod_name]
+                    target_label: pod
+                  - source_labels: [__meta_kubernetes_pod_container_name]
+                    target_label: container
+                pipeline_stages:
+                  # Parse JSON logs
+                  - json:
+                      expressions:
+                        level: level
+                        timestamp: timestamp
+                        message: message
+                  # Add timestamp
+                  - timestamp:
+                      source: timestamp
+                      format: RFC3339Nano
+                  # Label extraction for ArgoCD logs
+                  - match:
+                      selector: '{namespace="argocd"}'
+                      stages:
+                        - regex:
+                            expression: '.*level=(?P<level>\w+).*'
+                        - labels:
+                            level:
+                  # Label extraction for Pulumi Operator logs
+                  - match:
+                      selector: '{namespace="pulumi-kubernetes-operator"}'
+                      stages:
+                        - regex:
+                            expression: '.*"level":"(?P<level>\w+)".*'
+                        - labels:
+                            level:
+          resources:
+            limits:
+              cpu: 200m
+              memory: 256Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+
+        # Fluent Bit (alternative log collector)
+        fluent-bit:
+          enabled: false  # Use either Promtail or Fluent Bit
+
+        # Grafana integration (if not already deployed)
+        grafana:
+          enabled: false  # Assume Grafana is deployed via monitoring stack
+          sidecar:
+            datasources:
+              enabled: true
+              label: grafana_datasource
+              labelValue: "1"
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: logging
+    
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+    - CreateNamespace=true
+    - ServerSideApply=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 5m
+
+---
+# Grafana DataSource for Loki (if Grafana is in different namespace)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loki-datasource
+  namespace: monitoring
+  labels:
+    grafana_datasource: "1"
+data:
+  datasource.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Loki
+        type: loki
+        access: proxy
+        url: http://loki.logging.svc.cluster.local:3100
+        isDefault: false
+        editable: true
+        jsonData:
+          maxLines: 1000
+          derivedFields:
+            # Extract trace IDs from logs
+            - name: TraceID
+              matcherRegex: "trace_id=(\\w+)"
+              url: "http://jaeger.observability.svc.cluster.local:16686/trace/$${__value.raw}"
+              datasourceUid: jaeger
+
+---
+# Log-based alerts via PrometheusRule
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: log-based-alerts
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: log-based-alerts
+    prometheus: kube-prometheus
+spec:
+  groups:
+  - name: logs.rules
+    interval: 30s
+    rules:
+    - alert: HighErrorRate
+      expr: |
+        (
+          rate({namespace=~"myapp-.*",level="error"}[5m]) /
+          rate({namespace=~"myapp-.*"}[5m])
+        ) > 0.1
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High error rate detected in {{ $labels.namespace }}"
+        description: "Error rate is {{ $value | humanizePercentage }} in namespace {{ $labels.namespace }}"
+    
+    - alert: ArgoCDSyncFailures
+      expr: |
+        increase({namespace="argocd",level="error"} |~ ".*sync.*failed.*"[10m]) > 0
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "ArgoCD sync failures detected"
+        description: "ArgoCD has encountered sync failures in the last 10 minutes"
+    
+    - alert: PulumiStackErrors
+      expr: |
+        increase({namespace=~"pulumi-.*",level="error"}[5m]) > 0
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Pulumi stack errors detected"
+        description: "Pulumi Kubernetes Operator has encountered errors in the last 5 minutes"

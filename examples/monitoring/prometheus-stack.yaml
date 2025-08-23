@@ -1,0 +1,248 @@
+---
+# Prometheus monitoring stack deployment via ArgoCD
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring-stack
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: monitoring-stack
+    app.kubernetes.io/component: monitoring
+    app.kubernetes.io/part-of: observability
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  
+  source:
+    # Using Prometheus Community Helm Charts
+    chart: kube-prometheus-stack
+    repoURL: https://prometheus-community.github.io/helm-charts
+    targetRevision: 55.5.0  # Latest stable version
+    helm:
+      values: |
+        # Prometheus Configuration
+        prometheus:
+          prometheusSpec:
+            retention: 30d
+            storageSpec:
+              volumeClaimTemplate:
+                spec:
+                  storageClassName: gp2
+                  accessModes: ["ReadWriteOnce"]
+                  resources:
+                    requests:
+                      storage: 50Gi
+            resources:
+              limits:
+                cpu: 1000m
+                memory: 2Gi
+              requests:
+                cpu: 500m
+                memory: 1Gi
+            # Monitor ArgoCD
+            additionalScrapeConfigs:
+              - job_name: 'argocd-metrics'
+                static_configs:
+                  - targets: ['argocd-metrics.argocd.svc.cluster.local:8082']
+              - job_name: 'argocd-server-metrics'
+                static_configs:
+                  - targets: ['argocd-server-metrics.argocd.svc.cluster.local:8083']
+              - job_name: 'argocd-repo-server-metrics'
+                static_configs:
+                  - targets: ['argocd-repo-server-metrics.argocd.svc.cluster.local:8084']
+              # Monitor Pulumi Operator
+              - job_name: 'pulumi-kubernetes-operator'
+                static_configs:
+                  - targets: ['pulumi-kubernetes-operator.pulumi-kubernetes-operator.svc.cluster.local:8080']
+
+        # Grafana Configuration
+        grafana:
+          adminPassword: "admin123!"  # Change this in production!
+          persistence:
+            enabled: true
+            size: 10Gi
+            storageClassName: gp2
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 200m
+              memory: 256Mi
+          # Pre-configured dashboards
+          dashboardProviders:
+            dashboardproviders.yaml:
+              apiVersion: 1
+              providers:
+              - name: 'default'
+                orgId: 1
+                folder: ''
+                type: file
+                disableDeletion: false
+                editable: true
+                options:
+                  path: /var/lib/grafana/dashboards/default
+          dashboards:
+            default:
+              # ArgoCD Dashboard
+              argocd:
+                gnetId: 14584
+                revision: 1
+                datasource: Prometheus
+              # Kubernetes Cluster Monitoring
+              kubernetes-cluster:
+                gnetId: 7249
+                revision: 1
+                datasource: Prometheus
+              # Node Exporter Dashboard
+              node-exporter:
+                gnetId: 1860
+                revision: 27
+                datasource: Prometheus
+              # Pulumi Kubernetes Operator Dashboard (custom)
+              pulumi-operator:
+                json: |
+                  {
+                    "dashboard": {
+                      "id": null,
+                      "title": "Pulumi Kubernetes Operator",
+                      "tags": ["pulumi"],
+                      "timezone": "browser",
+                      "panels": [
+                        {
+                          "id": 1,
+                          "title": "Stack Success Rate",
+                          "type": "stat",
+                          "targets": [
+                            {
+                              "expr": "pulumi_stack_update_success_total / pulumi_stack_update_total * 100",
+                              "legendFormat": "Success Rate %"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  }
+
+        # AlertManager Configuration
+        alertmanager:
+          config:
+            global:
+              slack_api_url: 'YOUR_SLACK_WEBHOOK_URL'  # Configure your webhook
+            route:
+              group_by: ['alertname']
+              group_wait: 10s
+              group_interval: 10s
+              repeat_interval: 1h
+              receiver: 'web.hook'
+            receivers:
+            - name: 'web.hook'
+              slack_configs:
+              - channel: '#alerts'
+                title: 'Kubernetes Alert'
+                text: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+          alertmanagerSpec:
+            storage:
+              volumeClaimTemplate:
+                spec:
+                  storageClassName: gp2
+                  accessModes: ["ReadWriteOnce"]
+                  resources:
+                    requests:
+                      storage: 10Gi
+
+        # Additional Rules for GitOps
+        additionalPrometheusRulesMap:
+          gitops-rules:
+            groups:
+            - name: argocd
+              rules:
+              - alert: ArgoCDAppNotSynced
+                expr: argocd_app_info{sync_status!="Synced"} == 1
+                for: 5m
+                labels:
+                  severity: warning
+                annotations:
+                  summary: "ArgoCD application {{ $labels.name }} is not synced"
+                  
+            - name: pulumi
+              rules:
+              - alert: PulumiStackUpdateFailed
+                expr: pulumi_stack_update_failure_total > 0
+                for: 1m
+                labels:
+                  severity: critical
+                annotations:
+                  summary: "Pulumi stack {{ $labels.stack }} update failed"
+
+        # Node Exporter Configuration
+        nodeExporter:
+          enabled: true
+          
+        # Kube State Metrics Configuration
+        kubeStateMetrics:
+          enabled: true
+
+        # Service Monitor for ArgoCD
+        serviceMonitor:
+          enabled: true
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+    
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+    - CreateNamespace=true
+    - ServerSideApply=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 5m
+
+---
+# Service Monitor for ArgoCD metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: argocd-metrics
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: argocd-metrics
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: argocd-metrics
+  namespaceSelector:
+    matchNames:
+    - argocd
+  endpoints:
+  - port: metrics
+
+---
+# Service Monitor for Pulumi Kubernetes Operator
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: pulumi-kubernetes-operator
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: pulumi-kubernetes-operator
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pulumi-kubernetes-operator
+  namespaceSelector:
+    matchNames:
+    - pulumi-kubernetes-operator
+  endpoints:
+  - port: metrics

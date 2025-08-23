@@ -1,161 +1,170 @@
 #!/bin/bash
+
+# GitOps Ultra - Health Check Script
+# Quick health check for the GitOps deployment
+
 set -e
 
-# Colors for output
+# Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-print_status() {
-    echo -e "${BLUE}[INFO]${NC} $1"
+print_header() {
+    echo -e "${BLUE}🏥 GitOps Ultra - Health Check${NC}"
+    echo "=============================="
+    echo ""
 }
 
-print_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
+check_cluster_connection() {
+    echo -n "🔗 Cluster Connection: "
+    if kubectl cluster-info --request-timeout=5s > /dev/null 2>&1; then
+        echo -e "${GREEN}✅ Connected${NC}"
+        return 0
+    else
+        echo -e "${RED}❌ Failed${NC}"
+        return 1
+    fi
 }
 
-print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+check_argocd_health() {
+    echo -n "🎯 ArgoCD Health: "
+    local ready_pods=$(kubectl get pods -n argocd -l app.kubernetes.io/part-of=argocd --field-selector=status.phase=Running --no-headers 2>/dev/null | wc -l)
+    local total_pods=$(kubectl get pods -n argocd -l app.kubernetes.io/part-of=argocd --no-headers 2>/dev/null | wc -l)
+    
+    if [[ $ready_pods -gt 0 && $ready_pods -eq $total_pods ]]; then
+        echo -e "${GREEN}✅ All $total_pods pods running${NC}"
+        return 0
+    elif [[ $ready_pods -gt 0 ]]; then
+        echo -e "${YELLOW}⚠️  $ready_pods/$total_pods pods running${NC}"
+        return 1
+    else
+        echo -e "${RED}❌ No pods running${NC}"
+        return 1
+    fi
 }
 
-echo "🔍 GitOps Infrastructure Health Check"
-echo "====================================="
-
-# Check ArgoCD installation
-print_status "Checking ArgoCD installation..."
-if kubectl get namespace argocd &> /dev/null; then
-    if kubectl get pods -n argocd -l app.kubernetes.io/name=argocd-server --field-selector=status.phase=Running &> /dev/null; then
-        print_success "ArgoCD is running"
-        
-        # Get ArgoCD server status
-        ARGOCD_PODS=$(kubectl get pods -n argocd -l app.kubernetes.io/name=argocd-server --field-selector=status.phase=Running --no-headers | wc -l)
-        print_status "ArgoCD server pods running: $ARGOCD_PODS"
-        
-        # Check ArgoCD applications
-        APP_COUNT=$(kubectl get applications -n argocd --no-headers 2>/dev/null | wc -l || echo "0")
-        print_status "ArgoCD applications deployed: $APP_COUNT"
-        
-        if [[ $APP_COUNT -gt 0 ]]; then
-            print_status "Application status:"
-            kubectl get applications -n argocd -o custom-columns="NAME:.metadata.name,SYNC:.status.sync.status,HEALTH:.status.health.status" 2>/dev/null || print_error "Cannot get application status"
-        fi
+check_pulumi_operator() {
+    echo -n "⚙️  Pulumi Operator: "
+    local namespace=""
+    if kubectl get namespace pulumi-kubernetes-operator > /dev/null 2>&1; then
+        namespace="pulumi-kubernetes-operator"
+    elif kubectl get namespace pulumi-system > /dev/null 2>&1; then
+        namespace="pulumi-system"
     else
-        print_error "ArgoCD pods are not running"
-    fi
-else
-    print_error "ArgoCD namespace not found"
-fi
-
-echo ""
-
-# Check Pulumi Operator
-print_status "Checking Pulumi Operator..."
-if kubectl get namespace pulumi-system &> /dev/null; then
-    if kubectl get pods -n pulumi-system -l app.kubernetes.io/name=pulumi-operator --field-selector=status.phase=Running &> /dev/null; then
-        print_success "Pulumi Operator is running"
-        
-        # Check Pulumi stacks
-        STACK_COUNT=$(kubectl get stacks -n pulumi-system --no-headers 2>/dev/null | wc -l || echo "0")
-        print_status "Pulumi stacks deployed: $STACK_COUNT"
-        
-        if [[ $STACK_COUNT -gt 0 ]]; then
-            print_status "Stack status:"
-            kubectl get stacks -n pulumi-system -o custom-columns="NAME:.metadata.name,STATE:.status.lastUpdate.state,RESULT:.status.lastUpdate.result" 2>/dev/null || print_error "Cannot get stack status"
-        fi
-    else
-        print_error "Pulumi Operator pods are not running"
-    fi
-else
-    print_error "Pulumi Operator namespace not found"
-fi
-
-echo ""
-
-# Check application namespace and resources
-print_status "Checking application resources..."
-if kubectl get namespace myapp-dev &> /dev/null; then
-    print_success "Application namespace (myapp-dev) exists"
-    
-    # Check service account
-    if kubectl get serviceaccount myapp-dev-service-account -n myapp-dev &> /dev/null; then
-        print_success "Service account exists"
-        
-        # Check IRSA annotation
-        ROLE_ARN=$(kubectl get serviceaccount myapp-dev-service-account -n myapp-dev -o jsonpath='{.metadata.annotations.eks\.amazonaws\.com/role-arn}' 2>/dev/null || echo "")
-        if [[ -n "$ROLE_ARN" ]]; then
-            print_success "IRSA role configured: $ROLE_ARN"
-        else
-            print_error "IRSA role annotation missing"
-        fi
-    else
-        print_error "Service account not found"
+        echo -e "${RED}❌ Namespace not found${NC}"
+        return 1
     fi
     
-    # Check deployments
-    DEPLOYMENT_COUNT=$(kubectl get deployments -n myapp-dev --no-headers 2>/dev/null | wc -l || echo "0")
-    if [[ $DEPLOYMENT_COUNT -gt 0 ]]; then
-        print_success "Deployments found: $DEPLOYMENT_COUNT"
-        kubectl get deployments -n myapp-dev -o custom-columns="NAME:.metadata.name,READY:.status.readyReplicas,AVAILABLE:.status.availableReplicas,AGE:.metadata.creationTimestamp" 2>/dev/null
+    local ready_pods=$(kubectl get pods -n $namespace --field-selector=status.phase=Running --no-headers 2>/dev/null | wc -l)
+    local total_pods=$(kubectl get pods -n $namespace --no-headers 2>/dev/null | wc -l)
+    
+    if [[ $ready_pods -gt 0 && $ready_pods -eq $total_pods ]]; then
+        echo -e "${GREEN}✅ All $total_pods pods running${NC}"
+        return 0
+    elif [[ $ready_pods -gt 0 ]]; then
+        echo -e "${YELLOW}⚠️  $ready_pods/$total_pods pods running${NC}"
+        return 1
     else
-        print_error "No deployments found"
+        echo -e "${RED}❌ No pods running${NC}"
+        return 1
+    fi
+}
+
+check_applications() {
+    echo -n "📱 ArgoCD Apps: "
+    local synced=$(kubectl get applications -n argocd -o jsonpath='{.items[?(@.status.sync.status=="Synced")].metadata.name}' 2>/dev/null | wc -w)
+    local healthy=$(kubectl get applications -n argocd -o jsonpath='{.items[?(@.status.health.status=="Healthy")].metadata.name}' 2>/dev/null | wc -w)
+    local total=$(kubectl get applications -n argocd --no-headers 2>/dev/null | wc -l)
+    
+    if [[ $total -eq 0 ]]; then
+        echo -e "${YELLOW}⚠️  No applications found${NC}"
+        return 1
+    elif [[ $synced -eq $total && $healthy -eq $total ]]; then
+        echo -e "${GREEN}✅ All $total apps synced & healthy${NC}"
+        return 0
+    else
+        echo -e "${YELLOW}⚠️  $synced/$total synced, $healthy/$total healthy${NC}"
+        return 1
+    fi
+}
+
+check_stacks() {
+    echo -n "🏗️  Pulumi Stacks: "
+    local stacks=$(kubectl get stacks -A --no-headers 2>/dev/null | wc -l)
+    
+    if [[ $stacks -eq 0 ]]; then
+        echo -e "${YELLOW}⚠️  No stacks found${NC}"
+        return 1
+    else
+        echo -e "${GREEN}✅ $stacks stack(s) found${NC}"
+        return 0
+    fi
+}
+
+show_quick_status() {
+    echo ""
+    echo -e "${BLUE}📊 Quick Status Overview${NC}"
+    echo "------------------------"
+    
+    # ArgoCD Applications (if any)
+    if kubectl get applications -n argocd > /dev/null 2>&1; then
+        echo -e "${BLUE}ArgoCD Applications:${NC}"
+        kubectl get applications -n argocd -o custom-columns="NAME:.metadata.name,SYNC:.status.sync.status,HEALTH:.status.health.status" 2>/dev/null || echo "  Unable to fetch application status"
+        echo ""
     fi
     
-    # Check services
-    SERVICE_COUNT=$(kubectl get services -n myapp-dev --no-headers 2>/dev/null | wc -l || echo "0")
-    if [[ $SERVICE_COUNT -gt 0 ]]; then
-        print_success "Services found: $SERVICE_COUNT"
-    else
-        print_error "No services found"
+    # Pulumi Stacks (if any)
+    if kubectl get stacks -A > /dev/null 2>&1; then
+        echo -e "${BLUE}Pulumi Stacks:${NC}"
+        kubectl get stacks -A -o custom-columns="NAMESPACE:.metadata.namespace,NAME:.metadata.name,STATE:.status.lastUpdate.state" 2>/dev/null || echo "  Unable to fetch stack status"
+        echo ""
     fi
-else
-    print_error "Application namespace (myapp-dev) not found"
-fi
+}
 
-echo ""
-
-# Check AWS resources
-print_status "Checking AWS resources..."
-if command -v aws &> /dev/null; then
-    if aws sts get-caller-identity &> /dev/null; then
-        print_success "AWS credentials are valid"
-        
-        # Check S3 buckets
-        S3_BUCKETS=$(aws s3api list-buckets --query 'Buckets[?contains(Name, `myapp-dev`)].Name' --output text 2>/dev/null || echo "")
-        if [[ -n "$S3_BUCKETS" ]]; then
-            print_success "S3 buckets found: $S3_BUCKETS"
-        else
-            print_error "No S3 buckets found with myapp-dev prefix"
-        fi
-        
-        # Check SQS queues
-        SQS_QUEUES=$(aws sqs list-queues --queue-name-prefix myapp-dev --query 'QueueUrls' --output text 2>/dev/null || echo "")
-        if [[ -n "$SQS_QUEUES" ]]; then
-            print_success "SQS queues found"
-        else
-            print_error "No SQS queues found with myapp-dev prefix"
-        fi
+main() {
+    print_header
+    
+    local checks=0
+    local passed=0
+    
+    # Run health checks
+    check_cluster_connection && ((passed++)); ((checks++))
+    check_argocd_health && ((passed++)); ((checks++))
+    check_pulumi_operator && ((passed++)); ((checks++))
+    check_applications && ((passed++)); ((checks++))
+    check_stacks && ((passed++)); ((checks++))
+    
+    echo ""
+    echo "=============================="
+    
+    if [[ $passed -eq $checks ]]; then
+        echo -e "${GREEN}🎉 System Health: GOOD ($passed/$checks checks passed)${NC}"
+        show_quick_status
+    elif [[ $passed -gt 0 ]]; then
+        echo -e "${YELLOW}⚠️  System Health: PARTIAL ($passed/$checks checks passed)${NC}"
+        echo ""
+        echo "Some components may still be starting up or need attention."
+        echo "Run 'make verify-deployment' for detailed diagnostics."
+        show_quick_status
     else
-        print_error "AWS credentials are not valid"
+        echo -e "${RED}❌ System Health: CRITICAL (0/$checks checks passed)${NC}"
+        echo ""
+        echo "Multiple components are not responding."
+        echo "Recommended actions:"
+        echo "  1. Run 'make bootstrap' to install core components"
+        echo "  2. Run 'make status' for detailed information"
+        echo "  3. Run 'make verify-deployment' for comprehensive checks"
     fi
-else
-    print_error "AWS CLI not found"
-fi
+    
+    echo ""
+    echo -e "${BLUE}💡 Useful Commands:${NC}"
+    echo "  make status              # Detailed status information"
+    echo "  make check-argocd        # ArgoCD access information"
+    echo "  make verify-deployment   # Comprehensive verification"
+    echo "  make dev-argocd-forward  # Access ArgoCD UI locally"
+}
 
-echo ""
-
-# Overall health summary
-print_status "Health Summary:"
-if kubectl get applications -n argocd --no-headers 2>/dev/null | grep -q "Synced.*Healthy"; then
-    print_success "✅ GitOps pipeline is healthy"
-else
-    print_error "❌ GitOps pipeline has issues"
-fi
-
-echo ""
-print_status "For detailed troubleshooting, run:"
-echo "  - kubectl get applications -n argocd"
-echo "  - kubectl get stacks -n pulumi-system"
-echo "  - kubectl logs -f deployment/argocd-application-controller -n argocd"
-echo "  - kubectl logs -f deployment/pulumi-operator -n pulumi-system"
+main "$@"
